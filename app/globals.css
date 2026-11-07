@@ -156,7 +156,7 @@ img { max-width: 100%; }
 .wcard-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .wcard-head .cat { flex: none; }
 .work-mini { flex: 0 0 240px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 8px; text-decoration: none; color: #fff; min-width: 0; }
-.work-mini img, .wcard img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top center; background: #1e1e1e; display: block; }
+.work-mini img, .wcard img { width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; object-position: center; background: #1e1e1e; display: block; }
 .work-mini img { border-radius: 18px; }
 .work-mini strong { font-family: var(--display); font-size: 18px; }
 .work-mini span { color: var(--soft); font-size: 14px; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

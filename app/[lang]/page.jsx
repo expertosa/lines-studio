@@ -1,0 +1,123 @@
+import Link from 'next/link';
+import Header from '../../components/Header';
+import Footer from '../../components/Footer';
+import { t } from '../../lib/dict';
+import { site } from '../../lib/site';
+
+export default async function Home({ params }) {
+  const { lang } = await params;
+  const d = t(lang);
+  const wa = `https://wa.me/${site.whatsapp}`;
+  const items = [...d.marquee, ...d.marquee, ...d.marquee, ...d.marquee];
+
+  return (
+    <>
+      <Header lang={lang} />
+
+      <section className="dark">
+        <div className="wrap hero">
+          <div className="hero-copy">
+            <span className="pill">{d.hero.badge}</span>
+            <h1>
+              {d.hero.t1} <span className="hl">{d.hero.t2}</span> {d.hero.t3}
+            </h1>
+            <p className="hero-sub">{d.hero.sub}</p>
+            <div className="row">
+              <Link className="btn btn-lime" href={`/${lang}/gallery/`}>{d.hero.cta}</Link>
+              <a className="btn btn-ghost" href="#packages">{d.hero.cta2}</a>
+            </div>
+          </div>
+
+          <div className="hero-art" aria-hidden="true">
+            <div className="card-tilt" style={{ top: 20, insetInlineStart: 10, width: 300, height: 360, background: 'var(--lilac)', transform: 'rotate(6deg)' }}>
+              <div className="b" style={{ height: 14, width: '50%', background: '#111' }} />
+              <div className="b" style={{ height: 150, background: '#fff', borderRadius: 18 }} />
+              <div className="b" style={{ height: 10, width: '85%', background: '#9e88f0' }} />
+              <div className="b" style={{ height: 10, width: '60%', background: '#9e88f0' }} />
+              <div style={{ height: 40, width: '55%', background: '#111', borderRadius: 999, marginTop: 'auto' }} />
+            </div>
+            <div className="card-tilt" style={{ top: 90, insetInlineEnd: 0, width: 280, height: 320, background: 'var(--coral)', transform: 'rotate(-7deg)' }}>
+              <div className="b" style={{ height: 14, width: '40%', background: '#fff' }} />
+              <div className="b" style={{ height: 120, background: '#ffd9cf', borderRadius: 18 }} />
+              <div className="b" style={{ height: 10, width: '80%', background: '#ffb3a1' }} />
+              <div style={{ height: 40, width: '50%', background: '#fff', borderRadius: 999, marginTop: 'auto' }} />
+            </div>
+            <div className="sticker" style={{ bottom: 0, insetInlineStart: 120 }}>
+              <span>{d.hero.from}</span>
+              <strong>1,900</strong>
+              <span>{d.hero.sar}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="marquee-wrap"><div className="marquee" aria-hidden="true">
+        <div className="marquee-track">
+          {items.map((m, i) => (
+            <span key={i}>{m} <span style={{ marginInlineStart: 36 }}>✦</span></span>
+          ))}
+        </div>
+      </div></div>
+
+      <section id="packages" className="wrap section">
+        <div className="section-head">
+          <h2 className="h2">{d.packages.title}</h2>
+          <p className="lead">{d.packages.sub}</p>
+        </div>
+        <div className="grid-3">
+          {d.packages.items.map((p, i) => {
+            const href = p.href === 'gallery' ? `/${lang}/gallery/` : wa;
+            const btn = ['btn-ink', 'btn-outline', 'btn-lime'][i];
+            return (
+              <div key={p.name} className={`pkg pkg-${i + 1}`}>
+                <span className="tag">{p.tag}</span>
+                <h3>{p.name}</h3>
+                <p style={{ fontSize: 17, lineHeight: 1.8 }}>{p.desc}</p>
+                <div className="price">{p.price} <span>{p.unit}</span></div>
+                <p style={{ fontSize: 15 }}>{p.note}</p>
+                {p.href === 'gallery'
+                  ? <Link className={`btn ${btn}`} href={href}>{p.cta}</Link>
+                  : <a className={`btn ${btn}`} href={href}>{p.cta}</a>}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section id="how" className="dark">
+        <div className="wrap section">
+          <h2 className="h2">{d.how.t1}<br />{d.how.t2.split(' ')[0]} <span style={{ color: 'var(--lime)' }}>{d.how.t2.split(' ').slice(1).join(' ')}</span></h2>
+          <ol className="steps">
+            {d.how.steps.map((s, i) => (
+              <li key={s.n} className="step">
+                <span className="n" style={{ color: ['var(--lime)', 'var(--lilac)', 'var(--coral)', '#fff'][i] }}>{s.n}</span>
+                <h3>{s.t}</h3>
+                <p>{s.d}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className="wrap section">
+        <div className="section-head">
+          <h2 className="h2">{d.work.title}</h2>
+          <Link href={`/${lang}/gallery/`} style={{ fontWeight: 700, fontSize: 18 }}>{d.work.all}</Link>
+        </div>
+        <div className="placeholder">{d.work.soon}</div>
+      </section>
+
+      <section className="wrap" style={{ paddingBottom: 96 }}>
+        <div className="trial">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: '1 1 420px' }}>
+            <h2>{d.trial.title}</h2>
+            <p style={{ fontSize: 19, color: '#333' }}>{d.trial.sub}</p>
+          </div>
+          <a className="btn btn-ink" href={wa}>{d.trial.cta}</a>
+        </div>
+      </section>
+
+      <Footer lang={lang} />
+    </>
+  );
+}

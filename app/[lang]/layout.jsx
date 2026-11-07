@@ -1,6 +1,6 @@
 import '../globals.css';
-import { t } from '../../lib/dict';
 import { languages } from '../../lib/site';
+import { siteUrl } from '../../lib/seo';
 
 export const dynamicParams = false;
 
@@ -8,16 +8,17 @@ export function generateStaticParams() {
   return languages.map((lang) => ({ lang }));
 }
 
-export async function generateMetadata({ params }) {
-  const { lang } = await params;
-  const d = t(lang);
-  return {
-    title: d.meta.title,
-    description: d.meta.desc,
-    alternates: { languages: { ar: '/ar/', en: '/en/' } },
-    openGraph: { title: d.meta.title, description: d.meta.desc, locale: lang === 'ar' ? 'ar_SA' : 'en_US', type: 'website' },
-  };
-}
+export const metadata = {
+  metadataBase: new URL(siteUrl),
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon.png', type: 'image/png', sizes: '32x32' },
+      { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }],
+  },
+};
 
 export default async function RootLayout({ children, params }) {
   const { lang } = await params;

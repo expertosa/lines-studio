@@ -7,6 +7,7 @@ import Preview from './Preview';
 import { designs, sizes } from '../lib/designs';
 import { t } from '../lib/dict';
 import { site } from '../lib/site';
+import { isSaudiMobile } from '../lib/phone';
 
 const fmt = (n) => n.toLocaleString('en-US');
 
@@ -16,19 +17,34 @@ export default function OrderForm({ lang }) {
   const design = designs.find((x) => x.id === params.get('design')) || designs[0];
   const [sizeId, setSizeId] = useState('five');
   const [form, setForm] = useState({ name: '', city: '', phone: '', details: '', ar: true, en: true });
-  const [error, setError] = useState(false);
+  const [errors, setErrors] = useState({});
   const size = sizes.find((s) => s.id === sizeId);
 
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
+  const set = (k) => (e) => {
+    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setForm((prev) => ({ ...prev, [k]: value }));
+    setErrors((prev) => {
+      if (!prev[k] && !((k === 'ar' || k === 'en') && prev.langs)) return prev;
+      const next = { ...prev };
+      delete next[k];
+      if (k === 'ar' || k === 'en') delete next.langs;
+      return next;
+    });
+  };
 
   const submit = (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.phone.trim()) { setError(true); return; }
-    setError(false);
-    const langs = [form.ar && 'عربي', form.en && 'English'].filter(Boolean).join(' + ');
+    const next = {};
+    if (!form.name.trim()) next.name = d.errName;
+    if (!form.phone.trim()) next.phone = d.errPhone;
+    else if (!isSaudiMobile(form.phone)) next.phone = d.errPhoneFormat;
+    if (!form.ar && !form.en) next.langs = d.errLangs;
+    setErrors(next);
+    if (Object.keys(next).length) return;
+    const langs = [form.ar && d.langAr, form.en && d.langEn].filter(Boolean).join(' + ');
     const msg = [
       d.waIntro,
-      `• ${d.design}: ${design.name.ar} (${design.id})`,
+      `• ${d.design}: ${design.name[lang]} (${design.id})`,
       `• ${d.size}: ${size.label[lang]} — ${fmt(size.price)} SAR`,
       `• ${d.name}: ${form.name}`,
       form.city && `• ${d.city}: ${form.city}`,
@@ -75,10 +91,12 @@ export default function OrderForm({ lang }) {
           <legend style={{ fontSize: 20, fontWeight: 600, marginBottom: 14 }}>{d.s2}</legend>
           <div className="fields">
             <label className="field">{d.name}
-              <input value={form.name} onChange={set('name')} placeholder={d.namePh} required autoComplete="organization" />
+              <input value={form.name} onChange={set('name')} placeholder={d.namePh} required autoComplete="organization" aria-invalid={errors.name ? 'true' : undefined} aria-describedby={errors.name ? 'order-name-error' : undefined} />
+              {errors.name && <span className="field-err" id="order-name-error" role="alert">{errors.name}</span>}
             </label>
             <label className="field">{d.phone}
-              <input value={form.phone} onChange={set('phone')} placeholder={d.phonePh} required inputMode="tel" autoComplete="tel" dir="ltr" />
+              <input value={form.phone} onChange={set('phone')} placeholder={d.phonePh} required inputMode="tel" autoComplete="tel" dir="ltr" aria-invalid={errors.phone ? 'true' : undefined} aria-describedby={errors.phone ? 'order-phone-error' : undefined} />
+              {errors.phone && <span className="field-err" id="order-phone-error" role="alert">{errors.phone}</span>}
             </label>
             <label className="field">{d.city}
               <input value={form.city} onChange={set('city')} placeholder={d.cityPh} autoComplete="address-level2" />
@@ -87,10 +105,11 @@ export default function OrderForm({ lang }) {
           <label className="field">{d.details}
             <textarea rows={4} value={form.details} onChange={set('details')} placeholder={d.detailsPh} />
           </label>
-          <div className="checks">
+          <div className="checks" role="group" aria-label={d.langs} data-invalid={errors.langs ? 'true' : undefined} aria-describedby={errors.langs ? 'order-langs-error' : undefined}>
             <span style={{ fontWeight: 600 }}>{d.langs}</span>
-            <label><input type="checkbox" checked={form.ar} onChange={set('ar')} />عربي</label>
-            <label><input type="checkbox" checked={form.en} onChange={set('en')} />English</label>
+            <label><input type="checkbox" checked={form.ar} onChange={set('ar')} />{d.langAr}</label>
+            <label><input type="checkbox" checked={form.en} onChange={set('en')} />{d.langEn}</label>
+            {errors.langs && <span className="field-err" id="order-langs-error" role="alert">{errors.langs}</span>}
           </div>
         </fieldset>
       </div>
@@ -107,7 +126,7 @@ export default function OrderForm({ lang }) {
           <span>{d.total}</span>
           <span><b>{fmt(size.price)}</b> {lang === 'ar' ? 'ريال' : 'SAR'}</span>
         </div>
-        {error && <p className="err" role="alert">{d.required}</p>}
+        {Object.values(errors).some(Boolean) && <p className="err" role="alert">{d.required}</p>}
         <button type="submit" className="btn btn-lime">{d.submit}</button>
         <p style={{ fontSize: 13, color: 'var(--soft)', textAlign: 'center' }}>{d.note}</p>
         <p className="consent">

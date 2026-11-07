@@ -3,6 +3,14 @@ import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import { t } from '../../lib/dict';
 import { site } from '../../lib/site';
+import { pageMeta } from '../../lib/seo';
+import { featuredWorks } from '../../lib/work';
+
+export async function generateMetadata({ params }) {
+  const { lang } = await params;
+  const d = t(lang);
+  return pageMeta({ lang, title: d.meta.title, description: d.meta.desc });
+}
 
 export default async function Home({ params }) {
   const { lang } = await params;
@@ -99,12 +107,25 @@ export default async function Home({ params }) {
         </div>
       </section>
 
-      <section className="wrap section">
-        <div className="section-head">
-          <h2 className="h2">{d.work.title}</h2>
-          <Link href={`/${lang}/gallery/`} style={{ fontWeight: 700, fontSize: 18 }}>{d.work.all}</Link>
+      <section id="work" className="wrap section">
+        <div className="work-band">
+          <div className="section-head">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h2 className="h2">{d.work.title}</h2>
+              <p className="lead">{d.work.sub}</p>
+            </div>
+            <Link className="btn btn-lime" href={`/${lang}/work/`}>{d.work.all}</Link>
+          </div>
+          <div className="work-row">
+            {featuredWorks.map((item) => (
+              <Link key={item.id} className="work-mini" href={`/${lang}/work/#${item.id}`}>
+                <img src={item.image} alt="" width={1280} height={800} />
+                <strong>{item.name[lang]}</strong>
+                <span>{item.desc[lang]}</span>
+              </Link>
+            ))}
+          </div>
         </div>
-        <div className="placeholder">{d.work.soon}</div>
       </section>
 
       <section className="wrap" style={{ paddingBottom: 96 }}>

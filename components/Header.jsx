@@ -1,6 +1,7 @@
 import Link from 'next/link';
+import LangSwitch from './LangSwitch';
 import { t } from '../lib/dict';
-import { other, site } from '../lib/site';
+import { site } from '../lib/site';
 
 export default function Header({ lang, path = '' }) {
   const d = t(lang);
@@ -19,9 +20,10 @@ export default function Header({ lang, path = '' }) {
         </Link>
         <nav className="nav" aria-label={lang === 'ar' ? 'القائمة الرئيسية' : 'Main menu'}>
           <Link href={`/${lang}/gallery/`}>{d.nav.gallery}</Link>
+          <Link href={`/${lang}/work/`}>{d.nav.work}</Link>
           <Link href={`/${lang}/#packages`}>{d.nav.packages}</Link>
           <Link href={`/${lang}/#how`}>{d.nav.how}</Link>
-          <Link href={`/${other(lang)}/${path}`} hrefLang={other(lang)}>{d.nav.lang}</Link>
+          <LangSwitch lang={lang} path={path} label={d.nav.lang} />
           <a className="btn btn-white" href={`https://wa.me/${site.whatsapp}`}>{d.nav.talk}</a>
         </nav>
       </header>

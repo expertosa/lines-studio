@@ -14,6 +14,7 @@ export default function Footer({ lang }) {
         <nav className="footer-links" aria-label={ar ? 'روابط' : 'Links'}>
           <a href={`https://wa.me/${site.whatsapp}`} dir="ltr">{site.whatsappDisplay}</a>
           <a href={`mailto:${site.email}`}>{site.email}</a>
+          <Link href={`/${lang}/work/`}>{ar ? 'أعمالنا' : 'Work'}</Link>
           <Link href={`/${lang}/privacy/`}>{ar ? 'سياسة الخصوصية' : 'Privacy'}</Link>
           <Link href={`/${lang}/terms/`}>{ar ? 'الشروط والأحكام' : 'Terms'}</Link>
         </nav>

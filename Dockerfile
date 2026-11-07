@@ -8,5 +8,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM nginx:alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/out /usr/share/nginx/html
+COPY public/404.html /usr/share/nginx/html/404.html
 EXPOSE 80

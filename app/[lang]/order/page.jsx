@@ -4,11 +4,17 @@ import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import OrderForm from '../../../components/OrderForm';
 import { t } from '../../../lib/dict';
+import { pageMeta } from '../../../lib/seo';
 
 export async function generateMetadata({ params }) {
   const { lang } = await params;
   const d = t(lang);
-  return { title: `${d.order.title} | ${d.brandFull}` };
+  return pageMeta({
+    lang,
+    path: 'order/',
+    title: `${d.order.title} | ${d.brandFull}`,
+    description: d.order.sub,
+  });
 }
 
 export default async function Order({ params }) {

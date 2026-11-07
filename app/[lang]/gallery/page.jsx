@@ -3,11 +3,17 @@ import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import GalleryGrid from '../../../components/GalleryGrid';
 import { t } from '../../../lib/dict';
+import { pageMeta } from '../../../lib/seo';
 
 export async function generateMetadata({ params }) {
   const { lang } = await params;
   const d = t(lang);
-  return { title: `${d.gallery.title} | ${d.brandFull}`, description: d.gallery.sub };
+  return pageMeta({
+    lang,
+    path: 'gallery/',
+    title: `${d.gallery.title} | ${d.brandFull}`,
+    description: d.gallery.sub,
+  });
 }
 
 export default async function Gallery({ params }) {

@@ -24,7 +24,7 @@ export default function WorkGrid({ lang }) {
       <div className="work-grid">
         {shown.map((item) => (
           <article key={item.id} id={item.id} className="wcard">
-            <img src={item.image} alt={item.name[lang]} width={1280} height={800} />
+            <img src={item.image} alt={item.alt[lang]} width={800} height={500} loading="lazy" decoding="async" />
             <div className="wcard-body">
               <div className="wcard-head">
                 <h2>{item.name[lang]}</h2>

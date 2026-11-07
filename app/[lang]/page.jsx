@@ -119,7 +119,7 @@ export default async function Home({ params }) {
           <div className="work-row">
             {featuredWorks.map((item) => (
               <Link key={item.id} className="work-mini" href={`/${lang}/work/#${item.id}`}>
-                <img src={item.image} alt="" width={1280} height={800} />
+                <img src={item.image} alt={item.alt[lang]} width={800} height={500} loading="lazy" decoding="async" />
                 <strong>{item.name[lang]}</strong>
                 <span>{item.desc[lang]}</span>
               </Link>

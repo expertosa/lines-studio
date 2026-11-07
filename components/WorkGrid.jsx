@@ -26,7 +26,7 @@ export default function WorkGrid({ lang }) {
           <article key={item.id} id={item.id} className="wcard">
             <img src={item.image} alt={item.name[lang]} width={1280} height={800} />
             <div className="wcard-body">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div className="wcard-head">
                 <h2>{item.name[lang]}</h2>
                 <span className="cat">{catLabel(item.cat)}</span>
               </div>

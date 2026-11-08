@@ -23,6 +23,7 @@ export default function Header({ lang, path = '' }) {
           <Link href={`/${lang}/work/`}>{d.nav.work}</Link>
           <Link href={`/${lang}/#packages`}>{d.nav.packages}</Link>
           <Link href={`/${lang}/#how`}>{d.nav.how}</Link>
+          <Link href={`/${lang}/mcp/`}>{d.nav.mcp}</Link>
           <LangSwitch lang={lang} path={path} label={d.nav.lang} />
           <a className="btn btn-white" href={`https://wa.me/${site.whatsapp}`}>{d.nav.talk}</a>
         </nav>

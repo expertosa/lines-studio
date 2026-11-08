@@ -194,3 +194,26 @@ img { max-width: 100%; }
 .footer-links a { color: inherit; }
 .consent { font-size: 12.5px; color: var(--soft); text-align: center; }
 .consent a { color: #fff; }
+
+/* mcp page */
+.mcp-hero { padding-block: 56px 96px; display: flex; flex-direction: column; gap: 24px; align-items: flex-start; }
+.mcp-hero h1 { font-size: clamp(40px, 6.5vw, 76px); line-height: 1.2; font-weight: 900; max-width: 14ch; }
+.endpoint { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; background: #1e1e1e; border: 1px solid #333; border-radius: 20px; padding: 12px 12px 12px 20px; max-width: 100%; }
+[dir='rtl'] .endpoint { padding: 12px 20px 12px 12px; }
+.endpoint-label { color: var(--soft); font-size: 14px; }
+.endpoint code { font-size: 17px; color: var(--lime); overflow-wrap: anywhere; }
+.copy-btn { font-family: inherit; font-size: 14px; font-weight: 700; min-height: 40px; padding: 8px 16px; border-radius: 999px; border: 0; background: var(--lime); color: var(--ink); cursor: pointer; }
+.mcp-free { color: var(--soft); font-size: 15px; }
+.connect-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 20px; }
+.connect-card { background: #fff; border: 1px solid var(--line); border-radius: 28px; padding: 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.connect-card h3 { font-size: 20px; }
+.connect-card p { color: #4a4f57; line-height: 1.8; }
+.code-wrap { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.code-wrap pre { margin: 0; width: 100%; background: var(--ink); color: var(--lime); border-radius: 16px; padding: 14px 16px; font-size: 13px; line-height: 1.6; overflow-x: auto; text-align: left; }
+.code-wrap .copy-btn { background: var(--ink); color: #fff; }
+.tool-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.tool { border: 2px solid var(--ink); border-radius: 24px; padding: 22px; display: flex; flex-direction: column; gap: 10px; background: #fff; }
+.tool code { align-self: flex-start; background: var(--lilac); padding: 4px 10px; border-radius: 8px; font-size: 14px; font-weight: 700; }
+.tool p { color: #333; line-height: 1.8; }
+.tries { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.tries li { border-inline-start: 4px solid var(--lime); background: #1e1e1e; border-radius: 20px; padding: 20px; font-size: 18px; line-height: 1.7; }

@@ -3,4 +3,5 @@ node_modules
 out
 .git
 *.md
+services
 **/node_modules

@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "npx serve out"
+    "start": "npx serve out",
+    "test": "npm test --prefix services/creative-api",
+    "lint": "npm run lint --prefix services/creative-api",
+    "start:api": "npm start --prefix services/creative-api"
   },
   "dependencies": {
     "next": "^16.4.5",

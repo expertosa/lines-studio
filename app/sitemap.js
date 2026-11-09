@@ -2,7 +2,7 @@ import { siteUrl } from '../lib/seo';
 
 export const dynamic = 'force-static';
 
-const paths = ['', 'gallery/', 'order/', 'work/', 'privacy/', 'terms/'];
+const paths = ['', 'gallery/', 'order/', 'work/', 'mcp/', 'privacy/', 'terms/'];
 
 export default function sitemap() {
   const lastModified = '2026-11-07';

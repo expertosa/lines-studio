@@ -1,0 +1,14 @@
+{
+  "title": "Lines Studio",
+  "captions": [
+    { "text": "Websites and apps, built to launch.", "seconds": 4 },
+    { "text": "Arabic first. Fast. Beautiful.", "seconds": 4 }
+  ],
+  "tagline": "We build websites and apps.",
+  "cta": "lines.studio",
+  "format": "16:9",
+  "seconds": 15,
+  "hero": { "type": "laptop", "image": "../../../public/work/experto.webp" },
+  "palette": { "background": "#0B1F33", "primary": "#E8C872", "accent": "#4FD1C5", "text": "#F7F3EA" },
+  "quality": "final"
+}

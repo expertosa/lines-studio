@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.lines.blender-promo-worker</string>
+  <key>WorkingDirectory</key>
+  <string>/Volumes/Data/lines-video-worker/blender</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Volumes/Data/lines-video-worker/blender/app/src/worker.js</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>LINES_WORKER_ROOT</key>
+    <string>/Volumes/Data/lines-video-worker</string>
+    <key>LINES_API_BASE</key>
+    <string>https://api.lines.studio</string>
+    <key>LINES_WORKER_TOKEN_FILE</key>
+    <string>/Volumes/Data/lines-video-worker/secrets/blender-worker-token</string>
+    <key>BLENDER_BIN</key>
+    <string>/Applications/Blender.app/Contents/MacOS/Blender</string>
+    <key>PROMO_QUALITY</key>
+    <string>final</string>
+    <key>PROMO_FONT_AR</key>
+    <string>Noto Naskh Arabic</string>
+    <key>TMPDIR</key>
+    <string>/Volumes/Data/lines-video-worker/blender/tmp</string>
+    <key>XDG_CACHE_HOME</key>
+    <string>/Volumes/Data/lines-video-worker/blender/cache</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Volumes/Data/lines-video-worker/blender/logs/worker.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Volumes/Data/lines-video-worker/blender/logs/worker.err.log</string>
+</dict>
+</plist>

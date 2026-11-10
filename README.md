@@ -38,6 +38,17 @@ npm run build    # يطلع موقع ثابت في مجلد out/
 
 الموقع الثابت يبقى على nginx كما هو. توليد الفيديو خدمة منفصلة: `services/creative-api/` على Coolify كتطبيق مستقل (الهدف `api.lines.studio`)، وعامل السحب على الماك ميني في `services/mac-video-worker/`. تطبيقات اكسبرتو تنادي الواجهة من خادمها. تطبيق الجوال لا يحمل مفتاح الواجهة. العقد في `docs/video-api.openapi.yaml` و`services/creative-api/README.md`.
 
+## فيديوهات ترويجية ثلاثية الأبعاد (Blender)
+
+مشروع `services/blender-3d-promo/`: فيديو ترويجي ثلاثي الأبعاد كامل من ملف JSON. الكود يبني مشهد Blender (جوال أو لابتوب يعرض لقطة الموقع، أو كرة بشعار) مع خطوط مضيئة وحركة كاميرا، ويكتب النص العربي فوقه بـ ffmpeg.
+
+```bash
+cd services/blender-3d-promo
+BLENDER_BIN=/Applications/Blender.app/Contents/MacOS/Blender node src/cli.js examples/experto-ar.json --quality draft
+```
+
+ويشتغل أيضاً عبر واجهة الفيديو بـ `style: "promo3d"` مع عامل Blender على الماك ميني. التفاصيل في `services/blender-3d-promo/README.md`.
+
 ## إضافة تصميم جديد للمعرض
 
 أضف عنصر في `designs` داخل `lib/designs.js` بنفس الشكل: `id` و`cat` والاسم والوصف بالعربي والإنجليزي، وألوان المعاينة.

@@ -400,7 +400,7 @@ components:
         language: { $ref: "#/components/schemas/Language" }
         seconds: { type: integer }
         voice: { type: string }
-        engine: { type: string, enum: [moneyprinter, template, external] }
+        engine: { type: string, enum: [moneyprinter, template, external, blender] }
         endUserId: { type: string, nullable: true }
         prompt: { type: string, nullable: true }
         script: { type: object, nullable: true }

@@ -9,6 +9,7 @@ import { safeJoin } from './paths.js';
 import { presentJob, presentWorkerJob } from './present.js';
 import { artifactSignature, signaturesEqual } from './sign.js';
 import { listStyles } from './styles.js';
+import { blenderEngine } from './engines/blender.js';
 import { validateJob } from './validate.js';
 
 const JOB_ID = '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
@@ -44,7 +45,7 @@ function fail(res, error) {
 }
 
 function styleOptions(ctx) {
-  return { enableTemplate: ctx.enableTemplate, defaultEngine: ctx.defaultEngine };
+  return { enableTemplate: ctx.enableTemplate, enableBlender: ctx.enableBlender, defaultEngine: ctx.defaultEngine };
 }
 
 function present(ctx, job, summary = false) {
@@ -156,6 +157,7 @@ async function health(req, res, ctx) {
     engines: {
       template: { enabled: ctx.enableTemplate, ready: templateReady, mode: 'local' },
       moneyprinter: { mode: 'pull', ready: true, macRequired: true },
+      blender: { enabled: Boolean(ctx.enableBlender), mode: blenderEngine.mode, macRequired: blenderEngine.macRequired },
       external: { configured: false },
     },
   });

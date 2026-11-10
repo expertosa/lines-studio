@@ -91,11 +91,14 @@ On `job.succeeded`, `job.failed`, and `job.cancelled`, if `callbackUrl` was set:
 
 The in-process template worker only claims `engine: "template"`. MoneyPrinter jobs wait for the Mac. See `services/mac-video-worker/README.md`.
 
+`style: "promo3d"` (engine `blender`) is a procedural 3D promo rendered by Blender on the Mac. It is listed only when `LINES_ENABLE_BLENDER=1`, and only a worker key with `--engines blender` can claim it. Optional `metadata`: `hero` (`phone`, `laptop`, `orb`), `heroAsset` (a file name in the worker's assets folder), `palette` (`#bg,#primary,#accent[,#text]`), `brand`, `cta`. See `services/blender-3d-promo/README.md`.
+
 ## Keys
 
 ```bash
 LINES_DATA_DIR=/data node src/keys-cli.js create-app --tenant experto-web
 LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-mini --engines moneyprinter
+LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-blender --engines blender
 LINES_DATA_DIR=/data node src/keys-cli.js rotate-key --id experto-web
 LINES_DATA_DIR=/data node src/keys-cli.js rotate-webhook --tenant experto-web
 LINES_DATA_DIR=/data node src/keys-cli.js revoke --id experto-web
@@ -138,6 +141,7 @@ Set these on the Coolify app. Do not commit values.
 | `LINES_PORT` | Default `8080`. |
 | `LINES_DEFAULT_ENGINE` | `moneyprinter` (production) or `template` (local demo). Stock styles follow this. |
 | `LINES_ENABLE_TEMPLATE` | `1` (default) keeps the ffmpeg title-card engine. `0` hides `style: "template"`. |
+| `LINES_ENABLE_BLENDER` | `1` lists `style: "promo3d"` (Blender worker on the Mac). Default off. |
 | `LINES_BOOTSTRAP_KEYS` | JSON array above. Secret values. Not logged. |
 | `LINES_BOOTSTRAP_KEYS_FILE` | Absolute path to that JSON. Prefer this over the inline variable. |
 | `LINES_SIGNING_KEY` | HMAC key for short-lived artifact URLs. |

@@ -19,6 +19,7 @@ const SHARED = Object.freeze({
 /**
  * Stock styles follow `defaultEngine` (moneyprinter in production, template for a local demo).
  * `template` is the built-in ffmpeg engine and stays local when it is enabled.
+ * `blender` (style `promo3d`) is pulled by the Blender worker and is listed only when enabled.
  * `external` is reserved for a future generative vendor and is not listed until configured.
  */
 const DEFINITIONS = Object.freeze([
@@ -47,14 +48,29 @@ const DEFINITIONS = Object.freeze([
     description: 'Built-in ffmpeg title card. For tests and fallback, not a generative video.',
     testOnly: true,
   }),
+  Object.freeze({
+    id: 'promo3d',
+    label: 'Promo 3D',
+    engine: 'blender',
+    description: 'Procedural 3D promo rendered in Blender on the Mac worker (hero mockup, animated lines, brand palette).',
+  }),
 ]);
 
-export function listStyles({ enableTemplate, defaultEngine }) {
-  return DEFINITIONS.filter((style) => style.engine !== 'template' || enableTemplate).map((style) => ({
+function engineFor(style, defaultEngine) {
+  if (style.engine === 'template' || style.engine === 'blender') return style.engine;
+  return defaultEngine;
+}
+
+export function listStyles({ enableTemplate, enableBlender = false, defaultEngine }) {
+  return DEFINITIONS.filter((style) => {
+    if (style.engine === 'template') return enableTemplate;
+    if (style.engine === 'blender') return enableBlender;
+    return true;
+  }).map((style) => ({
     id: style.id,
     label: style.label,
     description: style.description,
-    engine: style.engine === 'template' ? 'template' : defaultEngine,
+    engine: engineFor(style, defaultEngine),
     testOnly: Boolean(style.testOnly),
     formats: SHARED.formats,
     seconds: SHARED.seconds,

@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { assColor, assEscape, assTime, buildOverlay } from '../src/overlay.js';
+import { fromBrief } from '../src/spec.js';
+
+test('ASS helpers', () => {
+  assert.equal(assColor('#E8C872'), '&H0072C8E8');
+  assert.equal(assColor('#0B1F33', 0x50), '&H50331F0B');
+  assert.equal(assTime(75.5), '0:01:15.50');
+  assert.equal(assEscape('{x}\\n\nnext'), '\\{x\\}\\\\n\\Nnext');
+});
+
+test('overlay places captions per scene and a branded outro', () => {
+  const spec = fromBrief({
+    title: 'اكسبرتو',
+    captions: ['نساعد منشأتك', 'من الفكرة إلى الإطلاق'],
+    cta: 'اطلب عرضك',
+    format: '9:16',
+    seconds: 12,
+  });
+  const ass = buildOverlay(spec, { fonts: { ar: 'IBM Plex Sans Arabic' } });
+  assert.match(ass, /PlayResX: 1080\nPlayResY: 1920/);
+  assert.match(ass, /Style: Caption,IBM Plex Sans Arabic,/);
+  const events = ass.split('\n').filter((line) => line.startsWith('Dialogue:'));
+  assert.equal(events.filter((line) => line.includes(',Caption,')).length, 2);
+  assert.ok(events.some((line) => line.includes(',Title,') && line.endsWith('اكسبرتو')));
+  assert.ok(events.some((line) => line.includes(',Cta,') && line.endsWith('اطلب عرضك')));
+  assert.ok(events.some((line) => line.includes(',Brand,') && line.endsWith('خطوط ستوديو')));
+  const outro = spec.scenes.at(-1);
+  const title = events.find((line) => line.includes(',Title,'));
+  assert.ok(title.startsWith(`Dialogue: 0,${assTime(outro.start + 0.2)},`));
+});
+
+test('tagline shows in the outro only when there are no captions', () => {
+  const withCaptions = buildOverlay(fromBrief({ title: 'Lines', tagline: 'We build apps.', captions: ['One'] }));
+  assert.doesNotMatch(withCaptions, /,Tag,/);
+  const bare = buildOverlay(fromBrief({ title: 'Lines', tagline: 'We build apps.', captions: [] }));
+  assert.match(bare, /,Tag,.*We build apps\./);
+});

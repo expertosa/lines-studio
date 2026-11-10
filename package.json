@@ -6,10 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "npx serve out",
-    "test": "npm test --prefix services/creative-api && npm test --prefix services/mac-video-worker",
-    "lint": "npm run lint --prefix services/creative-api && npm run lint --prefix services/mac-video-worker",
+    "test": "npm test --prefix services/creative-api && npm test --prefix services/mac-video-worker && npm test --prefix services/blender-3d-promo",
+    "lint": "npm run lint --prefix services/creative-api && npm run lint --prefix services/mac-video-worker && npm run lint --prefix services/blender-3d-promo",
     "start:api": "npm start --prefix services/creative-api",
-    "keys": "npm run keys --prefix services/creative-api"
+    "keys": "npm run keys --prefix services/creative-api",
+    "promo3d": "npm run render --prefix services/blender-3d-promo --"
   },
   "dependencies": {
     "next": "^16.4.5",

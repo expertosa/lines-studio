@@ -1,61 +1,66 @@
 import fs from 'node:fs';
-import { ApiError } from './errors.js';
-import { isInside, safeJoin } from './paths.js';
-import { presentJob } from './present.js';
-import { assertIdentity, assertNoCredentialQuery } from './auth.js';
-import { requestHash, timeoutFor, validateBrief } from './validate.js';
+import { randomUUID } from 'node:crypto';
+import { JOB_STATUSES, SECONDS } from './constants.js';
+import { ApiError, CodedError } from './errors.js';
+import { assertApp, assertNoCredentialQuery, assertWorker, singleHeader } from './auth.js';
+import { storeFile } from './artifacts.js';
+import { boundaryFrom, parseMultipart } from './multipart.js';
+import { safeJoin } from './paths.js';
+import { presentJob, presentWorkerJob } from './present.js';
+import { artifactSignature, signaturesEqual } from './sign.js';
+import { listStyles } from './styles.js';
+import { validateJob } from './validate.js';
 
 const JOB_ID = '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
-const ROUTES = [
-  { method: 'GET', re: /^\/v1\/health$/, auth: false, handler: health },
-  { method: 'POST', re: /^\/v1\/creative-jobs$/, scope: 'jobs:write', handler: createJob },
-  { method: 'GET', re: /^\/v1\/creative-jobs$/, scope: 'jobs:read', handler: listJobs },
-  { method: 'GET', re: new RegExp(`^\\/v1\\/creative-jobs\\/${JOB_ID}$`), scope: 'jobs:read', handler: getJob },
-  { method: 'POST', re: new RegExp(`^\\/v1\\/creative-jobs\\/${JOB_ID}\\/cancel$`), scope: 'jobs:cancel', handler: cancelJob },
-  { method: 'GET', re: new RegExp(`^\\/v1\\/creative-jobs\\/${JOB_ID}\\/artifacts\\/${JOB_ID}$`), scope: 'artifacts:read', handler: downloadArtifact },
-];
-const STATUSES = new Set(['queued', 'running', 'succeeded', 'failed', 'cancelled']);
 
 function send(res, status, body, extra = {}) {
   const payload = JSON.stringify(body);
-  res.writeHead(status, {
+  const headers = {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(payload),
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
     ...extra,
-  });
+  };
+  if (extra['retry-after'] == null && body?.error?.retryAfter) {
+    headers['retry-after'] = String(body.error.retryAfter);
+  }
+  res.writeHead(status, headers);
   res.end(payload);
 }
 
-function present(ctx, job) {
-  return presentJob(job, ctx.store.artifactsFor(job.id));
+function fail(res, error) {
+  const body = {
+    error: {
+      code: error.code || 'internal',
+      message: error.message || 'Request failed.',
+      ...(error.details ? { details: error.details } : {}),
+    },
+  };
+  const extra = {};
+  if (error.retryAfter) extra['retry-after'] = String(error.retryAfter);
+  send(res, error.status || 500, body, extra);
+}
+
+function styleOptions(ctx) {
+  return { enableTemplate: ctx.enableTemplate, defaultEngine: ctx.defaultEngine };
+}
+
+function present(ctx, job, summary = false) {
+  return presentJob(job, ctx.store.artifactsFor(job.id), {
+    summary,
+    now: ctx.now(),
+    signing: ctx.signingKey ? { key: ctx.signingKey, ttlMs: ctx.limits.signedUrlTtlMs } : null,
+  });
 }
 
 function pathname(req) {
-  const url = new URL(req.url, 'http://127.0.0.1');
-  if (url.pathname.includes('..') || url.pathname.includes('\\')) {
+  const url = assertNoCredentialQuery(req);
+  if (url.pathname.includes('..') || url.pathname.includes('\\') || url.pathname.includes('//')) {
     throw new ApiError(404, 'not_found', 'Not found.');
   }
   return url;
-}
-
-async function health(req, res, ctx) {
-  const ready = Boolean(ctx.provider.ready) && ctx.provider.paidCalls === false;
-  send(res, 200, {
-    ok: true,
-    ready,
-    service: 'lines-creative-api',
-    provider: ctx.provider.name,
-    generative: false,
-    paidCalls: false,
-    publishSupported: false,
-    fixtureFulfillment: false,
-    capabilities: ready && ctx.provider.name === 'local-ffmpeg'
-      ? ['template-video', 'template-still']
-      : [],
-  });
 }
 
 function isJsonContent(header) {
@@ -91,66 +96,33 @@ function readBody(req, limit) {
   });
 }
 
-async function readJson(req, limit) {
+async function readJson(req, limit, { required = true } = {}) {
+  const raw = await readBody(req, limit);
+  if (raw.length === 0) {
+    if (!required) return {};
+    throw new ApiError(400, 'invalid_json', 'Request body must be JSON.');
+  }
   if (!isJsonContent(req.headers['content-type'])) {
-    req.resume();
     throw new ApiError(415, 'unsupported_media_type', 'Content-Type must be application/json.');
   }
-  const raw = await readBody(req, limit);
-  if (raw.length === 0) throw new ApiError(400, 'invalid_json', 'Request body must be JSON.');
   try {
     const parsed = JSON.parse(raw.toString('utf8'));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
-    const plain = Object.create(null);
-    for (const key of Object.keys(parsed)) plain[key] = parsed[key];
-    return plain;
-  } catch {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new ApiError(400, 'invalid_json', 'Request body must be a JSON object.');
+    }
+    return Object.fromEntries(Object.keys(parsed).map((key) => [key, parsed[key]]));
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(400, 'invalid_json', 'Request body must be JSON.');
   }
 }
 
 function idempotencyKey(req) {
-  const value = req.headers['idempotency-key'];
+  const value = singleHeader(req, 'idempotency-key');
   if (typeof value !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(value)) {
     throw new ApiError(400, 'invalid_idempotency_key', 'Idempotency-Key is required.');
   }
   return value;
-}
-
-async function createJob(req, res, ctx, identity) {
-  if (!ctx.provider.ready || ctx.provider.paidCalls !== false || ctx.provider.generative !== false) {
-    req.resume();
-    throw new ApiError(503, 'provider_unavailable', 'Local render engine is not available. No paid provider is configured.');
-  }
-  const key = idempotencyKey(req);
-  const body = await readJson(req, ctx.limits.maxBodyBytes);
-  const brief = validateBrief(body);
-  const result = ctx.store.createOrReplay({
-    tenantId: identity.tenantId,
-    customerId: identity.customerId,
-    idempotencyKey: key,
-    requestHash: requestHash(brief),
-    brief,
-    provider: ctx.provider.name,
-    timeoutMs: ctx.timeoutOverrideMs ?? timeoutFor(brief),
-    deadlineAt: ctx.now() + ctx.limits.deadlineMs,
-    maxAttempts: ctx.limits.maxAttempts,
-    artifactTtlMs: ctx.limits.artifactTtlMs,
-  }, ctx.limits.maxJobsPerHour);
-  if (result.rateLimited) {
-    throw new ApiError(429, 'rate_limited', 'Generation limit reached for this customer.', [
-      { path: 'customer', code: 'hourly_limit', limit: ctx.limits.maxJobsPerHour },
-    ]);
-  }
-  if (result.conflict) {
-    throw new ApiError(409, 'idempotency_conflict', 'Idempotency-Key was reused with a different request.');
-  }
-  const payload = present(ctx, result.job);
-  if (result.replay) {
-    send(res, 200, payload, { 'idempotency-replayed': 'true' });
-    return;
-  }
-  send(res, 201, payload, { location: `/v1/creative-jobs/${result.job.id}` });
 }
 
 function encodeCursor(job) {
@@ -163,18 +135,113 @@ function decodeCursor(value) {
   try {
     parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
   } catch {
-    throw new ApiError(422, 'validation_error', 'Cursor is invalid.', [{ path: 'cursor', code: 'format' }]);
+    throw new ApiError(422, 'validation_error', 'Cursor is invalid.', [
+      { path: 'cursor', code: 'format' },
+    ]);
   }
   if (!parsed || typeof parsed.id !== 'string' || !/^[0-9a-f-]{36}$/i.test(parsed.id) || !Number.isInteger(parsed.t)) {
-    throw new ApiError(422, 'validation_error', 'Cursor is invalid.', [{ path: 'cursor', code: 'format' }]);
+    throw new ApiError(422, 'validation_error', 'Cursor is invalid.', [
+      { path: 'cursor', code: 'format' },
+    ]);
   }
   return { id: parsed.id, createdAt: parsed.t };
 }
 
-async function listJobs(req, res, ctx, identity) {
+async function health(req, res, ctx) {
+  const templateReady = Boolean(ctx.enableTemplate && ctx.template?.ready);
+  send(res, 200, {
+    ok: true,
+    service: 'lines-video-api',
+    defaultEngine: ctx.defaultEngine,
+    engines: {
+      template: { enabled: ctx.enableTemplate, ready: templateReady, mode: 'local' },
+      moneyprinter: { mode: 'pull', ready: true, macRequired: true },
+      external: { configured: false },
+    },
+  });
+}
+
+async function styles(req, res, ctx) {
+  assertApp(req, ctx.store, 'jobs:read');
+  send(res, 200, { styles: listStyles(styleOptions(ctx)) });
+}
+
+async function quote(req, res, ctx) {
+  assertApp(req, ctx.store, 'jobs:read');
+  const url = pathname(req);
+  const allowed = new Set(['seconds', 'style', 'format', 'language']);
+  for (const key of url.searchParams.keys()) {
+    if (!allowed.has(key)) {
+      throw new ApiError(422, 'validation_error', 'Query is invalid.', [{ path: key, code: 'unknown' }]);
+    }
+  }
+  const seconds = Number(url.searchParams.get('seconds'));
+  const styleId = url.searchParams.get('style');
+  const format = url.searchParams.get('format') || '9:16';
+  const language = url.searchParams.get('language') || 'ar';
+  const catalog = listStyles(styleOptions(ctx));
+  const style = catalog.find((item) => item.id === styleId);
+  if (!style || !SECONDS.includes(seconds) || !style.formats.includes(format) || !style.languages.includes(language)) {
+    throw new ApiError(422, 'validation_error', 'Quote is invalid.', [
+      { path: 'seconds', code: 'enum' },
+    ]);
+  }
+  send(res, 200, {
+    style: style.id,
+    seconds,
+    format,
+    language,
+    voice: style.defaultVoice[language],
+    engine: style.engine,
+    currency: 'SAR',
+    amount: 0,
+    includedInPlan: true,
+  });
+}
+
+async function createJob(req, res, ctx) {
+  const identity = assertApp(req, ctx.store, 'jobs:write');
+  const key = idempotencyKey(req);
+  const body = await readJson(req, ctx.limits.maxBodyBytes);
+  const jobInput = await validateJob(body, {
+    ...styleOptions(ctx),
+    lookup: ctx.webhookLookup,
+    allowedPorts: ctx.webhookPorts,
+  });
+  if (jobInput.engine === 'template' && !ctx.template?.ready) {
+    throw new ApiError(503, 'engine_unavailable', 'Template engine is not available.', undefined, { retryAfter: 30 });
+  }
+  if (jobInput.engine === 'external') {
+    throw new ApiError(503, 'engine_unavailable', 'External engine is not configured.');
+  }
+  const result = ctx.store.createOrReplay({
+    ...jobInput,
+    tenantId: identity.tenantId,
+    endUserId: identity.endUserId,
+    idempotencyKey: key,
+    deadlineAt: ctx.now() + ctx.limits.deadlineMs,
+    maxAttempts: ctx.limits.maxAttempts,
+    artifactTtlMs: ctx.limits.artifactTtlMs,
+  });
+  if (result.unknownTenant) throw new ApiError(403, 'forbidden', 'This credential cannot act for that tenant.');
+  if (result.rateLimited) {
+    throw new ApiError(429, 'rate_limited', 'Tenant quota exceeded.', [
+      { path: result.scope, code: result.scope === 'hour' ? 'hourly_limit' : 'monthly_seconds', limit: result.limit },
+    ], { retryAfter: result.retryAfter });
+  }
+  if (result.conflict) {
+    throw new ApiError(409, 'idempotency_conflict', 'Idempotency-Key was reused with a different request.');
+  }
+  const extra = { location: `/v1/jobs/${result.job.id}` };
+  if (result.replay) extra['idempotency-replayed'] = 'true';
+  send(res, 202, { id: result.job.id, status: result.job.status }, extra);
+}
+
+async function listJobs(req, res, ctx) {
+  const identity = assertApp(req, ctx.store, 'jobs:read');
   const url = pathname(req);
   const status = url.searchParams.get('status');
-  if (status && !STATUSES.has(status)) {
+  if (status && !JOB_STATUSES.includes(status)) {
     throw new ApiError(422, 'validation_error', 'Status filter is invalid.', [{ path: 'status', code: 'enum' }]);
   }
   let limit = 20;
@@ -185,133 +252,304 @@ async function listJobs(req, res, ctx, identity) {
     }
     limit = Number(raw);
   }
-  const cursor = decodeCursor(url.searchParams.get('cursor'));
   const page = ctx.store.listOwned({
     tenantId: identity.tenantId,
-    customerId: identity.customerId,
     status: status || null,
-    cursor,
+    cursor: decodeCursor(url.searchParams.get('cursor')),
     limit,
   });
   const last = page.jobs[page.jobs.length - 1];
   send(res, 200, {
-    jobs: page.jobs.map((job) => present(ctx, job)),
+    jobs: page.jobs.map((job) => present(ctx, job, true)),
     nextCursor: page.hasMore && last ? encodeCursor(last) : null,
   });
 }
 
-async function getJob(req, res, ctx, identity, jobId) {
-  const job = ctx.store.getOwned(jobId, identity.tenantId, identity.customerId);
-  if (!job) throw new ApiError(404, 'not_found', 'Job not found.');
-  send(res, 200, present(ctx, job));
+async function getJob(req, res, ctx, id) {
+  const identity = assertApp(req, ctx.store, 'jobs:read');
+  const job = ctx.store.getOwned(id, identity.tenantId);
+  if (!job) throw new ApiError(404, 'not_found', 'Not found.');
+  send(res, 200, present(ctx, job, false));
 }
 
-async function cancelJob(req, res, ctx, identity, jobId) {
-  if (req.headers['content-length'] && req.headers['content-length'] !== '0') {
-    const body = await readJson(req, ctx.limits.maxBodyBytes);
-    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length > 0) {
-      throw new ApiError(422, 'validation_error', 'Cancel does not accept a body.', [{ path: '', code: 'unknown_field' }]);
+async function cancelJob(req, res, ctx, id) {
+  const identity = assertApp(req, ctx.store, 'jobs:cancel');
+  const raw = await readBody(req, 1024);
+  if (raw.length > 0) {
+    if (!isJsonContent(req.headers['content-type'])) {
+      throw new ApiError(415, 'unsupported_media_type', 'Content-Type must be application/json.');
     }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.toString('utf8'));
+    } catch {
+      throw new ApiError(400, 'invalid_json', 'Request body must be JSON.');
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length > 0) {
+      throw new ApiError(422, 'validation_error', 'Cancel body must be empty.', [{ path: '', code: 'empty' }]);
+    }
+  }
+  const result = ctx.store.requestCancel(id, identity.tenantId);
+  if (result.notFound) throw new ApiError(404, 'not_found', 'Not found.');
+  if (result.notCancellable) throw new ApiError(409, 'not_cancellable', 'This job can no longer be cancelled.');
+  send(res, 200, { id: result.job.id, status: result.pending ? 'running' : result.job.status, cancelRequested: result.pending || result.job.status === 'cancelled' });
+}
+
+async function usage(req, res, ctx) {
+  const identity = assertApp(req, ctx.store, 'usage:read');
+  const url = pathname(req);
+  const fromRaw = url.searchParams.get('from');
+  const toRaw = url.searchParams.get('to');
+  const from = fromRaw ? Date.parse(fromRaw) : monthFloor(ctx.now());
+  const to = toRaw ? Date.parse(toRaw) : ctx.now();
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
+    throw new ApiError(422, 'validation_error', 'Usage window is invalid.', [{ path: 'from', code: 'range' }]);
+  }
+  const report = ctx.store.usage({ tenantId: identity.tenantId, from, to });
+  send(res, 200, {
+    from: new Date(from).toISOString(),
+    to: new Date(to).toISOString(),
+    ...report,
+  });
+}
+
+function monthFloor(ms) {
+  const date = new Date(ms);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+}
+
+function parseRange(header, size) {
+  if (!header) return { start: 0, end: size - 1, partial: false };
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(header).trim());
+  if (!match || header.includes(',')) return { invalid: true };
+  const [, startText, endText] = match;
+  if (!startText && !endText) return { invalid: true };
+  let start;
+  let end;
+  if (!startText) {
+    const suffix = Number(endText);
+    if (!Number.isInteger(suffix) || suffix <= 0) return { invalid: true };
+    start = Math.max(size - suffix, 0);
+    end = size - 1;
   } else {
-    req.resume();
+    start = Number(startText);
+    end = endText ? Number(endText) : size - 1;
   }
-  const result = ctx.store.requestCancel(jobId, identity.tenantId, identity.customerId, ctx.now());
-  if (result.notFound) throw new ApiError(404, 'not_found', 'Job not found.');
-  if (result.notCancellable) {
-    throw new ApiError(409, 'not_cancellable', 'This job can no longer be cancelled.');
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start >= size || end < start) {
+    return { unsatisfiable: true };
   }
-  send(res, 200, present(ctx, result.job));
+  return { start, end: Math.min(end, size - 1), partial: true };
 }
 
-function removeArtifact(ctx, artifact) {
-  try {
-    fs.rmSync(safeJoin(ctx.dataDir, artifact.relativePath), { force: true });
-  } catch {
-    // The row is still removed so a missing file cannot be downloaded later.
-  }
-  ctx.store.deleteArtifact(artifact.id);
-}
-
-async function downloadArtifact(req, res, ctx, identity, jobId, artifactId) {
-  const artifact = ctx.store.artifactForOwner(artifactId, jobId, identity.tenantId, identity.customerId);
-  if (!artifact || artifact.classification !== 'rendered') {
-    throw new ApiError(404, 'not_found', 'Artifact not found.');
+async function downloadArtifact(req, res, ctx, jobId, artifactId) {
+  const url = pathname(req);
+  const exp = url.searchParams.get('exp');
+  const sig = url.searchParams.get('sig');
+  let artifact;
+  if (exp || sig) {
+    if (!ctx.signingKey || !exp || !sig || !/^\d{1,12}$/.test(exp)) {
+      throw new ApiError(401, 'unauthorized', 'Signed URL is invalid.');
+    }
+    const expected = artifactSignature(ctx.signingKey, exp, jobId, artifactId);
+    if (!signaturesEqual(expected, sig) || Number(exp) * 1000 < ctx.now()) {
+      throw new ApiError(401, 'unauthorized', 'Signed URL is invalid.');
+    }
+    artifact = ctx.store.artifactById(artifactId, jobId);
+    if (!artifact) throw new ApiError(404, 'not_found', 'Not found.');
+  } else {
+    const identity = assertApp(req, ctx.store, 'artifacts:read');
+    artifact = ctx.store.artifactForOwner(artifactId, jobId, identity.tenantId);
+    if (!artifact) throw new ApiError(404, 'not_found', 'Not found.');
   }
   if (artifact.expiresAt <= ctx.now()) {
-    removeArtifact(ctx, artifact);
     throw new ApiError(410, 'expired', 'Artifact has expired.');
   }
-  let filePath;
-  try {
-    filePath = safeJoin(ctx.dataDir, artifact.relativePath);
-  } catch {
-    throw new ApiError(404, 'not_found', 'Artifact not found.');
+  const filePath = safeJoin(ctx.dataDir, artifact.relativePath);
+  if (!fs.existsSync(filePath)) throw new ApiError(404, 'not_found', 'Not found.');
+  const size = fs.statSync(filePath).size;
+  const range = parseRange(req.headers.range, size);
+  if (range.invalid || range.unsatisfiable) {
+    res.writeHead(416, {
+      'content-range': `bytes */${size}`,
+      'accept-ranges': 'bytes',
+      'cache-control': 'private, no-store',
+    });
+    res.end();
+    return;
   }
-  if (!isInside(ctx.dataDir, filePath) || !fs.existsSync(filePath)) {
-    throw new ApiError(404, 'not_found', 'Artifact not found.');
-  }
-  const stat = fs.statSync(filePath);
-  if (!stat.isFile() || stat.size !== artifact.byteSize) {
-    throw new ApiError(404, 'not_found', 'Artifact not found.');
-  }
-  const extension = artifact.mime === 'video/mp4' ? '.mp4' : '.png';
-  res.writeHead(200, {
+  const status = range.partial ? 206 : 200;
+  const length = range.end - range.start + 1;
+  res.writeHead(status, {
     'content-type': artifact.mime,
-    'content-length': stat.size,
-    'content-disposition': `attachment; filename="creative-${artifact.id}${extension}"`,
+    'content-length': length,
+    'accept-ranges': 'bytes',
+    ...(range.partial ? { 'content-range': `bytes ${range.start}-${range.end}/${size}` } : {}),
     'x-content-sha256': artifact.sha256,
     etag: `"${artifact.sha256}"`,
-    'cache-control': 'private, no-store',
+    'content-disposition': `attachment; filename="lines-${artifact.id}.${artifact.mime === 'video/mp4' ? 'mp4' : 'img'}"`,
     'x-content-type-options': 'nosniff',
-    'x-artifact-classification': 'rendered',
-    'referrer-policy': 'no-referrer',
+    'cache-control': 'private, no-store',
   });
-  fs.createReadStream(filePath).pipe(res);
+  if (req.method === 'HEAD') {
+    res.end();
+    return;
+  }
+  fs.createReadStream(filePath, { start: range.start, end: range.end }).pipe(res);
 }
 
-export function createHandler(ctx) {
-  return async function handle(req, res) {
+async function workerClaim(req, res, ctx) {
+  const worker = assertWorker(req, ctx.store);
+  if (!worker.engines?.length) throw new ApiError(403, 'forbidden', 'This worker has no engines.');
+  await readJson(req, 2048, { required: false });
+  const claimed = ctx.store.claimNext({
+    engines: worker.engines,
+    owner: worker.keyId,
+    leaseMs: ctx.limits.leaseMs,
+    concurrency: ctx.limits.maxConcurrency,
+  });
+  if (!claimed.job) {
+    send(res, 200, { job: null });
+    return;
+  }
+  send(res, 200, {
+    job: presentWorkerJob(claimed.job),
+    leaseExpiresAt: new Date(claimed.job.leaseExpiresAt).toISOString(),
+  });
+}
+
+async function workerHeartbeat(req, res, ctx, id) {
+  const worker = assertWorker(req, ctx.store);
+  await readJson(req, 2048, { required: false });
+  const result = ctx.store.heartbeat(id, worker.keyId, ctx.limits.leaseMs);
+  if (result.mismatch || result.expired) throw new ApiError(409, 'lease_mismatch', 'This worker does not hold the lease.');
+  send(res, 200, {
+    cancelRequested: result.job.cancelRequested,
+    leaseExpiresAt: new Date(result.leaseExpiresAt).toISOString(),
+  });
+}
+
+async function workerArtifact(req, res, ctx, id) {
+  const worker = assertWorker(req, ctx.store);
+  const job = ctx.store.readJob(id);
+  if (!job || job.status !== 'running' || job.leaseOwner !== worker.keyId) {
+    req.resume();
+    throw new ApiError(409, 'lease_mismatch', 'This worker does not hold the lease.');
+  }
+  const boundary = boundaryFrom(req.headers['content-type']);
+  if (!boundary) {
+    req.resume();
+    throw new ApiError(415, 'unsupported_media_type', 'Content-Type must be multipart/form-data.');
+  }
+  const raw = await readBody(req, ctx.limits.maxVideoBytes + ctx.limits.maxThumbBytes + 1024 * 1024);
+  const parts = parseMultipart(raw, boundary);
+  const video = parts.find((part) => part.name === 'video');
+  const thumbnail = parts.find((part) => part.name === 'thumbnail');
+  if (!video && !thumbnail) throw new ApiError(422, 'validation_error', 'A video or thumbnail part is required.', [{ path: 'video', code: 'required' }]);
+  const saved = [];
+  for (const part of [video, thumbnail].filter(Boolean)) {
+    const sniffed = sniff(part.body);
+    const mime = part.name === 'video' ? 'video/mp4' : sniffed;
+    if (part.name === 'video' && sniffed !== 'video/mp4') {
+      throw new ApiError(422, 'artifact_rejected', 'Video part must be an MP4.');
+    }
+    if (part.name === 'thumbnail' && sniffed !== 'image/png' && sniffed !== 'image/jpeg') {
+      throw new ApiError(422, 'artifact_rejected', 'Thumbnail must be a PNG or JPEG.');
+    }
+    const tmp = safeJoin(ctx.tmpDir, `${randomUUID()}.${mime === 'video/mp4' ? 'mp4' : 'img'}`);
+    fs.mkdirSync(ctx.tmpDir, { recursive: true });
+    fs.writeFileSync(tmp, part.body);
     try {
-      assertNoCredentialQuery(req);
-      const url = pathname(req);
-      const matches = ROUTES.filter((route) => route.re.test(url.pathname));
-      if (matches.length === 0) throw new ApiError(404, 'not_found', 'Not found.');
-      const route = matches.find((item) => item.method === req.method);
-      if (!route) {
-        const error = new ApiError(405, 'method_not_allowed', 'Method is not allowed.');
-        error.allow = [...new Set(matches.map((item) => item.method))].join(', ');
-        throw error;
-      }
-      const match = url.pathname.match(route.re);
-      if (route.auth === false) {
-        await route.handler(req, res, ctx);
+      const result = await storeFile(ctx, job, worker.keyId, tmp, { role: part.name === 'video' ? 'video' : 'thumbnail', mime });
+      if (result.exists) throw new ApiError(409, 'artifact_exists', 'That artifact role is already stored.');
+      if (result.mismatch) throw new ApiError(409, 'lease_mismatch', 'This worker does not hold the lease.');
+      saved.push({ id: result.artifact.id, role: result.artifact.role, sha256: result.artifact.sha256, byteSize: result.artifact.byteSize });
+    } catch (error) {
+      fs.rmSync(tmp, { force: true });
+      throw error;
+    }
+  }
+  send(res, 201, { artifacts: saved });
+}
+
+function sniff(body) {
+  if (body.length >= 12 && body.subarray(4, 8).toString('ascii') === 'ftyp') return 'video/mp4';
+  if (body.length >= 8 && body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47) return 'image/png';
+  if (body.length >= 3 && body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff) return 'image/jpeg';
+  return '';
+}
+
+const FAIL_CODES = new Set(['render_failed', 'render_timeout', 'provider_unavailable', 'cancelled', 'artifact_rejected']);
+
+async function workerComplete(req, res, ctx, id) {
+  const worker = assertWorker(req, ctx.store);
+  await readJson(req, 2048, { required: false });
+  const result = ctx.store.complete(id, worker.keyId);
+  if (result.mismatch) throw new ApiError(409, 'lease_mismatch', 'This worker does not hold the lease.');
+  if (result.missingVideo) throw new ApiError(409, 'artifact_required', 'Upload the video before completing the job.');
+  send(res, 200, { id: result.job.id, status: result.job.status });
+}
+
+async function workerFail(req, res, ctx, id) {
+  const worker = assertWorker(req, ctx.store);
+  const body = await readJson(req, 4096);
+  const code = FAIL_CODES.has(body.code) ? body.code : 'render_failed';
+  const message = typeof body.message === 'string' ? body.message.replace(/https?:\/\/\S+/gi, '[url]').slice(0, 300) : 'Render failed.';
+  const retry = body.retry !== false && code !== 'cancelled';
+  const result = ctx.store.fail(id, worker.keyId, { code, message, retry });
+  if (result.mismatch) throw new ApiError(409, 'lease_mismatch', 'This worker does not hold the lease.');
+  send(res, 200, { id: result.job.id, status: result.job.status });
+}
+
+const ROUTES = [
+  { method: 'GET', re: /^\/v1\/health$/, auth: false, handler: health },
+  { method: 'GET', re: /^\/v1\/styles$/, handler: styles },
+  { method: 'GET', re: /^\/v1\/quote$/, handler: quote },
+  { method: 'POST', re: /^\/v1\/jobs$/, handler: createJob },
+  { method: 'GET', re: /^\/v1\/jobs$/, handler: listJobs },
+  { method: 'GET', re: /^\/v1\/usage$/, handler: usage },
+  { method: 'GET', re: new RegExp(`^\\/v1\\/jobs\\/${JOB_ID}$`), handler: (req, res, ctx, match) => getJob(req, res, ctx, match[1]) },
+  { method: 'POST', re: new RegExp(`^\\/v1\\/jobs\\/${JOB_ID}\\/cancel$`), handler: (req, res, ctx, match) => cancelJob(req, res, ctx, match[1]) },
+  { method: 'GET', re: new RegExp(`^\\/v1\\/jobs\\/${JOB_ID}\\/artifacts\\/${JOB_ID}$`), handler: (req, res, ctx, match) => downloadArtifact(req, res, ctx, match[1], match[2]) },
+  { method: 'HEAD', re: new RegExp(`^\\/v1\\/jobs\\/${JOB_ID}\\/artifacts\\/${JOB_ID}$`), handler: (req, res, ctx, match) => downloadArtifact(req, res, ctx, match[1], match[2]) },
+  { method: 'POST', re: /^\/v1\/worker\/claim$/, handler: workerClaim },
+  { method: 'POST', re: new RegExp(`^\\/v1\\/worker\\/jobs\\/${JOB_ID}\\/heartbeat$`), handler: (req, res, ctx, match) => workerHeartbeat(req, res, ctx, match[1]) },
+  { method: 'POST', re: new RegExp(`^\\/v1\\/worker\\/jobs\\/${JOB_ID}\\/artifacts$`), handler: (req, res, ctx, match) => workerArtifact(req, res, ctx, match[1]) },
+  { method: 'POST', re: new RegExp(`^\\/v1\\/worker\\/jobs\\/${JOB_ID}\\/complete$`), handler: (req, res, ctx, match) => workerComplete(req, res, ctx, match[1]) },
+  { method: 'POST', re: new RegExp(`^\\/v1\\/worker\\/jobs\\/${JOB_ID}\\/fail$`), handler: (req, res, ctx, match) => workerFail(req, res, ctx, match[1]) },
+];
+
+export function createHandler(ctx) {
+  return async function handler(req, res) {
+    try {
+      if (req.method === 'OPTIONS') {
+        send(res, 404, { error: { code: 'not_found', message: 'Not found.' } });
         return;
       }
-      const identity = assertIdentity(req, ctx.credentials, route.scope);
-      await route.handler(req, res, ctx, identity, match[1], match[2]);
+      const url = pathname(req);
+      const route = ROUTES.find((item) => item.method === req.method && item.re.test(url.pathname));
+      if (!route) {
+        req.resume();
+        send(res, 404, { error: { code: 'not_found', message: 'Not found.' } });
+        return;
+      }
+      const match = url.pathname.match(route.re);
+      await route.handler(req, res, ctx, match);
     } catch (error) {
       if (res.headersSent) {
         res.destroy();
         return;
       }
+      if (!req.readableEnded) req.resume();
       if (error instanceof ApiError) {
-        req.resume();
-        const extra = {};
-        if (error.status === 401) extra['www-authenticate'] = 'Bearer realm="lines-creative"';
-        if (error.status === 429) extra['retry-after'] = '60';
-        if (error.status === 503) extra['retry-after'] = '30';
-        if (error.allow) extra.allow = error.allow;
-        send(res, error.status, {
-          error: {
-            code: error.code,
-            message: error.message,
-            ...(error.details ? { details: error.details } : {}),
-          },
-        }, extra);
+        fail(res, error);
         return;
       }
-      ctx.log('error', { code: 'internal', message: String(error?.message || 'error').slice(0, 300) });
-      send(res, 500, { error: { code: 'internal', message: 'Internal error.' } });
+      if (error instanceof CodedError) {
+        fail(res, new ApiError(422, 'artifact_rejected', 'Output did not pass media checks.'));
+        return;
+      }
+      ctx.log('error', { code: 'request', message: String(error?.message || 'error').slice(0, 200) });
+      fail(res, new ApiError(500, 'internal', 'Request failed.'));
     }
   };
 }

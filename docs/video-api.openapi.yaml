@@ -1,0 +1,486 @@
+openapi: 3.0.3
+info:
+  title: Lines video API
+  version: 0.2.0
+  description: |
+    Server-to-server short-video jobs for Experto apps. Mobile clients call their own backend.
+    The backend holds the bearer key. MoneyPrinterTurbo is reached only by the Mac pull worker.
+servers:
+  - url: https://api.lines.studio
+    description: Production
+tags:
+  - name: meta
+  - name: jobs
+  - name: worker
+security:
+  - bearerAuth: []
+paths:
+  /v1/health:
+    get:
+      tags: [meta]
+      security: []
+      summary: Process health
+      responses:
+        "200":
+          description: The process is up. moneyprinter.ready means the API can queue, not that the Mac is online.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, service, defaultEngine, engines]
+                properties:
+                  ok: { type: boolean }
+                  service: { type: string, example: lines-video-api }
+                  defaultEngine: { type: string, enum: [moneyprinter, template] }
+                  engines:
+                    type: object
+                    additionalProperties: true
+  /v1/styles:
+    get:
+      tags: [meta]
+      summary: Styles, formats, durations, and voices
+      responses:
+        "200":
+          description: Catalog for the enabled engines
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  styles:
+                    type: array
+                    items: { $ref: "#/components/schemas/Style" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /v1/quote:
+    get:
+      tags: [meta]
+      summary: Price quote
+      parameters:
+        - $ref: "#/components/parameters/seconds"
+        - $ref: "#/components/parameters/style"
+        - name: format
+          in: query
+          schema: { $ref: "#/components/schemas/Format" }
+        - name: language
+          in: query
+          schema: { $ref: "#/components/schemas/Language" }
+      responses:
+        "200":
+          description: Included in the Experto plan until a paid engine is configured
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/jobs:
+    post:
+      tags: [jobs]
+      summary: Queue a video
+      parameters:
+        - $ref: "#/components/parameters/idempotency"
+        - $ref: "#/components/parameters/endUser"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobCreate" }
+      responses:
+        "202":
+          description: Queued, or an idempotent replay. Replay sets Idempotency-Replayed true and returns the current status.
+          headers:
+            Idempotency-Replayed:
+              schema: { type: string }
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobAccepted" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+    get:
+      tags: [jobs]
+      summary: List jobs for the caller's tenant
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/Status" }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: Newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobs, nextCursor]
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: "#/components/schemas/Job" }
+                  nextCursor:
+                    type: string
+                    nullable: true
+  /v1/jobs/{id}:
+    get:
+      tags: [jobs]
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/endUser"
+      responses:
+        "200":
+          description: Job. Unknown ids and other tenants are both 404.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/jobs/{id}/cancel:
+    post:
+      tags: [jobs]
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Cancelled, or cancel requested while running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { $ref: "#/components/schemas/Status" }
+                  cancelRequested: { type: boolean }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/jobs/{id}/artifacts/{artifactId}:
+    get:
+      tags: [jobs]
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - name: artifactId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: exp
+          in: query
+          description: Unix seconds. With sig, the bearer is not required.
+          schema: { type: string }
+        - name: sig
+          in: query
+          description: Hex HMAC. This is not an API key.
+          schema: { type: string }
+        - name: Range
+          in: header
+          schema: { type: string, example: bytes=0-1023 }
+      responses:
+        "200":
+          description: Full object
+          headers:
+            Accept-Ranges: { schema: { type: string } }
+            X-Content-SHA256: { schema: { type: string } }
+          content:
+            video/mp4: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+        "206":
+          description: Range
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+        "416":
+          description: Range not satisfiable
+  /v1/usage:
+    get:
+      tags: [jobs]
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Counts and remaining quota
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Usage" }
+  /v1/worker/claim:
+    post:
+      tags: [worker]
+      summary: Lease the oldest queued job this worker's engines can render
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: A job, or job null when the queue or the concurrency cap is idle
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job:
+                    oneOf:
+                      - { $ref: "#/components/schemas/WorkerJob" }
+                      - { type: "null" }
+                  leaseExpiresAt: { type: string, format: date-time }
+  /v1/worker/jobs/{id}/heartbeat:
+    post:
+      tags: [worker]
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses:
+        "200":
+          description: Lease extended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cancelRequested: { type: boolean }
+                  leaseExpiresAt: { type: string, format: date-time }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/worker/jobs/{id}/artifacts:
+    post:
+      tags: [worker]
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                video: { type: string, format: binary }
+                thumbnail: { type: string, format: binary }
+      responses:
+        "201":
+          description: Stored
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/worker/jobs/{id}/complete:
+    post:
+      tags: [worker]
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses:
+        "200":
+          description: succeeded, or cancelled if a cancel was requested
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/worker/jobs/{id}/fail:
+    post:
+      tags: [worker]
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                message: { type: string }
+                retry: { type: boolean }
+      responses:
+        "200":
+          description: failed, requeued, or cancelled
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    idempotency:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 128 }
+    endUser:
+      name: X-End-User-Id
+      in: header
+      required: false
+      schema: { type: string }
+    seconds:
+      name: seconds
+      in: query
+      required: true
+      schema: { type: integer, enum: [15, 30, 60] }
+    style:
+      name: style
+      in: query
+      required: true
+      schema: { type: string }
+  responses:
+    Error:
+      description: Error
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+                  details:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path: { type: string }
+                        code: { type: string }
+  schemas:
+    Format:
+      type: string
+      enum: ["9:16", "16:9", "1:1"]
+    Language:
+      type: string
+      enum: [ar, en]
+    Status:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled]
+    JobCreate:
+      type: object
+      additionalProperties: false
+      required: [reference, title, style, format, language, seconds]
+      properties:
+        reference: { type: string }
+        title: { type: string }
+        prompt: { type: string }
+        script:
+          type: object
+          properties:
+            text: { type: string }
+            scenes:
+              type: array
+              items:
+                type: object
+                required: [text]
+                properties:
+                  text: { type: string }
+                  seconds: { type: integer }
+        style: { type: string, example: promo }
+        format: { $ref: "#/components/schemas/Format" }
+        language: { $ref: "#/components/schemas/Language" }
+        seconds: { type: integer, enum: [15, 30, 60] }
+        voice: { type: string, example: ar-SA-HamedNeural }
+        callbackUrl: { type: string, format: uri }
+        metadata:
+          type: object
+          additionalProperties: true
+    JobAccepted:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/Status" }
+    Job:
+      type: object
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        title: { type: string }
+        status: { $ref: "#/components/schemas/Status" }
+        style: { type: string }
+        format: { $ref: "#/components/schemas/Format" }
+        language: { $ref: "#/components/schemas/Language" }
+        seconds: { type: integer }
+        voice: { type: string }
+        engine: { type: string, enum: [moneyprinter, template, external] }
+        endUserId: { type: string, nullable: true }
+        prompt: { type: string, nullable: true }
+        script: { type: object, nullable: true }
+        metadata: { type: object }
+        callbackUrl: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deadlineAt: { type: string, format: date-time }
+        error:
+          type: object
+          nullable: true
+          properties:
+            code: { type: string }
+            message: { type: string }
+        artifacts:
+          type: array
+          items: { $ref: "#/components/schemas/Artifact" }
+    Artifact:
+      type: object
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [video, thumbnail] }
+        mime: { type: string }
+        byteSize: { type: integer }
+        sha256: { type: string }
+        expiresAt: { type: string, format: date-time }
+        downloadPath: { type: string }
+        signedUrl: { type: string }
+    WorkerJob:
+      type: object
+      description: Render spec. No callback URL and no webhook secret.
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        title: { type: string }
+        prompt: { type: string, nullable: true }
+        script: { type: object, nullable: true }
+        style: { type: string }
+        format: { $ref: "#/components/schemas/Format" }
+        language: { $ref: "#/components/schemas/Language" }
+        seconds: { type: integer }
+        voice: { type: string }
+        engine: { type: string }
+        attempt: { type: integer }
+        deadlineAt: { type: string, format: date-time }
+    Quote:
+      type: object
+      properties:
+        style: { type: string }
+        seconds: { type: integer }
+        format: { $ref: "#/components/schemas/Format" }
+        language: { $ref: "#/components/schemas/Language" }
+        voice: { type: string }
+        engine: { type: string }
+        currency: { type: string, example: SAR }
+        amount: { type: number, example: 0 }
+        includedInPlan: { type: boolean }
+    Usage:
+      type: object
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        jobs: { type: integer }
+        videoSeconds: { type: integer }
+        byStatus: { type: object }
+        quota: { type: object }
+    Style:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        engine: { type: string }
+        formats:
+          type: array
+          items: { $ref: "#/components/schemas/Format" }
+        seconds:
+          type: array
+          items: { type: integer }
+        languages:
+          type: array
+          items: { $ref: "#/components/schemas/Language" }
+        voices: { type: object }
+        defaultVoice: { type: object }

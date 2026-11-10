@@ -1,252 +1,184 @@
-# Lines Studio creative jobs API
+# Lines video API
 
-Server-to-server API for preparing a video or a still ad creative. The public marketing site stays a static Next.js export behind nginx. This process is separate: experto-web calls it, then the Experto app talks only to experto-web.
+Shared server-to-server API for short videos. experto-web, and any other Experto app, calls it with its own bearer key. Mobile apps never hold a key and never call this host; they call their own backend, which calls here.
 
-It does not publish ads, does not call a paid or generative model, and does not accept a fixture file as a finished order.
+The public marketing site stays a static Next.js export. This process is a separate Coolify app (target `api.lines.studio`).
 
-## Who calls it
+Generation today is pull-based. The API queues a job. A worker on the owner's Mac mini claims it and runs [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo) locally (LLM script when the caller did not send one, Edge TTS, Pixabay stock). The API never opens a connection to the Mac or to Pixabay. An external generative vendor can be added later behind `src/engines/external.js` without changing the HTTP contract.
 
-1. experto-web holds the bearer credential (`LINES_CREATIVE_CREDENTIALS` or `LINES_CREATIVE_CREDENTIALS_FILE`).
-2. experto-web sends the tenant and customer that own the job.
-3. The mobile app never sees this credential and never calls a media provider directly.
-
-There is no browser CORS header. Identity in the query string is rejected.
+`style: "template"` is a built-in ffmpeg title card used for tests and as a local fallback. It is not a generative video.
 
 ## Auth
 
-| Header | Required | Rule |
-|---|---|---|
-| `Authorization` | yes, except `GET /v1/health` | `Bearer` plus a 24–256 character token from the credential file. Alphabet: `A-Za-z0-9._~+/-` and trailing `=`. |
-| `X-Tenant-Id` | yes | 1–64 of `A-Za-z0-9_-`. The credential must list that tenant or `*`. |
-| `X-Customer-Id` | yes | Same shape. Stored as the owner of the job. |
-| `Idempotency-Key` | POST create only | 8–128 of `A-Za-z0-9._:-`. |
-| `Content-Type` | POST with a body | `application/json` or `application/json; charset=utf-8`. |
+`Authorization: Bearer <app key>`. One key per consuming app (the tenant). Keys are stored as SHA-256 hashes. The plaintext is printed once by the key CLI and is never accepted in the query string. There is no CORS header.
 
-A credential is a JSON array:
+Scopes, not implied by each other: `jobs:write`, `jobs:read`, `jobs:cancel`, `artifacts:read`, `usage:read`.
 
-```json
-[{
-  "id": "experto-web",
-  "token": "CHANGE_ME_TO_A_LONG_RANDOM_TOKEN",
-  "tenants": ["*"],
-  "scopes": ["jobs:write", "jobs:read", "jobs:cancel", "artifacts:read"]
-}]
-```
+Optional `X-End-User-Id` is stored on the job. It is not an authorization boundary. Another tenant gets **404** for a job id it does not own.
 
-`CHANGE_ME_TO_A_LONG_RANDOM_TOKEN` is only a shape example. The boot path rejects tokens shorter than 24 characters. Scopes are not implied by each other. A token limited to tenant A receives **403** if it sends tenant B, and **404** if it sends tenant B's job id with tenant B's own header (the job is not in that tenant). Another customer in the same tenant also gets **404**. Missing jobs and unowned jobs use the same 404 body.
+Worker tokens are separate, scope `worker:run` only, and can only call `/v1/worker/*`.
+
+Each tenant has its own webhook secret, used only to sign callbacks.
 
 ## Endpoints
 
-### `GET /v1/health`
+| Method | Path | Auth |
+|---|---|---|
+| GET | `/v1/health` | none |
+| GET | `/v1/styles` | `jobs:read` |
+| GET | `/v1/quote?seconds=&style=` | `jobs:read` |
+| POST | `/v1/jobs` | `jobs:write` + `Idempotency-Key` |
+| GET | `/v1/jobs?status=&cursor=` | `jobs:read` |
+| GET | `/v1/jobs/:id` | `jobs:read` |
+| POST | `/v1/jobs/:id/cancel` | `jobs:cancel` |
+| GET | `/v1/jobs/:id/artifacts/:artifactId` | `artifacts:read`, or a short-lived `exp` + `sig` query |
+| GET | `/v1/usage?from=&to=` | `usage:read` |
+| POST | `/v1/worker/claim` | `worker:run` |
+| POST | `/v1/worker/jobs/:id/heartbeat` | `worker:run` |
+| POST | `/v1/worker/jobs/:id/artifacts` | `worker:run` multipart |
+| POST | `/v1/worker/jobs/:id/complete` | `worker:run` |
+| POST | `/v1/worker/jobs/:id/fail` | `worker:run` |
 
-No auth. `ok: true` means the process is up. `ready: true` means the local ffmpeg binary answered. It does **not** mean a paid network, an ad account, or a generative model is configured.
+`POST /v1/jobs` returns **202** `{ "id", "status": "queued" }`. The same idempotency key and body replay that job (header `Idempotency-Replayed: true`) and do not spend another quota slot. A different body with the same key is **409**.
+
+Create body:
 
 ```json
 {
-  "ok": true,
-  "ready": true,
-  "service": "lines-creative-api",
-  "provider": "local-ffmpeg",
-  "generative": false,
-  "paidCalls": false,
-  "publishSupported": false,
-  "fixtureFulfillment": false,
-  "capabilities": ["template-video", "template-still"]
+  "reference": "order-1001",
+  "title": "عرض من اكسبرتو",
+  "prompt": "منتج جديد",
+  "script": { "text": "نص جاهز", "scenes": [{ "text": "مشهد", "seconds": 5 }] },
+  "style": "promo",
+  "format": "9:16",
+  "language": "ar",
+  "seconds": 30,
+  "voice": "ar-SA-HamedNeural",
+  "callbackUrl": "https://example.com/api/app/studio/render-callback",
+  "metadata": { "source": "web" }
 }
 ```
 
-`capabilities` is empty when the engine is not ready.
+Send `prompt` and/or `script`. `format` is `9:16`, `16:9`, or `1:1`. `language` is `ar` or `en`. `seconds` is `15`, `30`, or `60`. `voice` defaults to `ar-SA-HamedNeural` or `en-US-JennyNeural`. `callbackUrl` is https only; loopback, link-local, and private addresses are rejected (**422 `ssrf_blocked`**), including after DNS resolution.
 
-### `POST /v1/creative-jobs`
+States: `queued` → `running` → `succeeded` | `failed` | `cancelled`.
 
-Creates a queued job, or replays one.
+`GET /v1/quote` returns `{ style, seconds, format, language, voice, engine, currency: "SAR", amount: 0, includedInPlan: true }`. Amount stays 0 until a paid engine is configured. The external engine module is not configured.
 
-Video body:
+Artifact download supports `Range`. A successful job also includes `signedUrl` (HMAC, `LINES_SIGNING_KEY`, default 15 minutes) when that key is set. The signature is not an API key.
 
-```json
-{
-  "kind": "video",
-  "locale": "ar",
-  "headline": "إعلان افتتاح الفرع",
-  "subline": "احجز معاينة مجانية",
-  "callToAction": "تواصل معنا",
-  "brandName": "خطوط ستوديو",
-  "width": 1080,
-  "height": 1920,
-  "durationMs": 5000,
-  "backgroundColor": "#102A43",
-  "foregroundColor": "#F7F3EA"
-}
+## Quotas, leases, retention
+
+- Per-tenant jobs per rolling hour (default 20) and video-seconds per UTC month (default 36000). **429** with `Retry-After`. A cancelled job that never started returns its seconds. The hourly slot stays spent.
+- Global renders at once: `LINES_MAX_CONCURRENCY`, default **1** (one Mac mini).
+- Lease: `LINES_LEASE_MS`, default 120s, extended by heartbeat. An expired lease goes back to `queued` until `LINES_MAX_ATTEMPTS` (default 2), then `failed` / `lease_expired`.
+- Deadline: `LINES_JOB_DEADLINE_MS`, default 2 hours, then `deadline_exceeded`.
+- Artifacts: `LINES_ARTIFACT_TTL_MS`, default 14 days. After that, download is **410**.
+
+## Webhooks
+
+On `job.succeeded`, `job.failed`, and `job.cancelled`, if `callbackUrl` was set:
+
+- Body `{ "event", "job" }` where `job` matches `GET /v1/jobs/:id`.
+- `X-Lines-Timestamp`: unix seconds.
+- `X-Lines-Signature`: `sha256=` + hex HMAC-SHA256 of `timestamp.body` (the timestamp, a dot, and the raw body) using the tenant webhook secret.
+- Retries with backoff. Non-2xx and blocked addresses are not followed (redirects are not followed). Polling still works.
+- Receivers should reject timestamps older than 5 minutes and compare the signature in constant time. Dedupe on `event` + `job.id`.
+
+## Worker
+
+`POST /v1/worker/claim` returns `{ "job": null }` or `{ "job", "leaseExpiresAt" }`. The job carries the render spec (title, prompt, script, style, format, language, seconds, voice) and not the callback URL. Heartbeat returns `{ "cancelRequested", "leaseExpiresAt" }`. Artifacts are multipart fields `video` (MP4) and optional `thumbnail` (PNG or JPEG). `complete` requires the video. `fail` body is `{ "code", "message", "retry" }`.
+
+The in-process template worker only claims `engine: "template"`. MoneyPrinter jobs wait for the Mac. See `services/mac-video-worker/README.md`.
+
+## Keys
+
+```bash
+LINES_DATA_DIR=/data node src/keys-cli.js create-app --tenant experto-web
+LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-mini --engines moneyprinter
+LINES_DATA_DIR=/data node src/keys-cli.js rotate-key --id experto-web
+LINES_DATA_DIR=/data node src/keys-cli.js rotate-webhook --tenant experto-web
+LINES_DATA_DIR=/data node src/keys-cli.js revoke --id experto-web
+LINES_DATA_DIR=/data node src/keys-cli.js list
 ```
 
-Still ad creative: `"kind": "ad_creative"` and omit `durationMs`. Unknown fields are rejected. These fields are rejected with **422 `publish_not_supported`** because this service does not publish: `publish`, `publishAt`, `published`, `adAccountId`, `accountId`, `accessToken`, `refreshToken`, `oauth`, `oauthToken`, `campaign`, `campaignId`, `adsetId`, `adId`, `pageId`, `platform`, `destinationUrl`, `mediaUrl`, `imageUrl`, `videoUrl`, `sourceUrl`, `callbackUrl`, `webhookUrl`, `externalUrl`, `clickUrl`, `landingUrl`, `budget`, `spend`, `dailyBudget`.
+`create-app` and `rotate-key` print the new token once. `create-app` prints the webhook secret only when it creates one. `list` prints id, kind, tenant, status, and a short prefix. Stored hashes are not printed.
 
-Validation:
-
-- `locale`: `ar` or `en`.
-- Text lengths in Unicode code points: headline 1–80, subline 0–120, call to action 0–40, brand 1–40. Letters, numbers, and simple punctuation only. URLs, slashes, backslashes, colons, and bidi overrides are rejected (`url_rejected` or `bad_charset`).
-- Size presets: `1080x1920`, `1920x1080`, `1080x1080`, `720x1280`, `1280x720`, `640x360` (preview). Both dimensions must match a preset.
-- `durationMs`: integer 2000–10000 for video.
-- Colors: `#RRGGBB`. Contrast ratio must be at least 3.
-- Body max 8192 bytes.
-
-Responses:
-
-| Status | When |
-|---|---|
-| 201 | New job. `Location: /v1/creative-jobs/{id}` (relative, not taken from the Host header). |
-| 200 | Same tenant, customer, key, and canonical body. Header `Idempotency-Replayed: true`. Does not spend another hourly slot. |
-| 409 `idempotency_conflict` | Same key, different body. |
-| 422 `validation_error` | Field list in `error.details[].path` and `.code`. |
-| 422 `publish_not_supported` | Publish or remote-media fields. The response does not echo secrets. |
-| 429 `rate_limited` | More than the hourly cap for that tenant+customer. `Retry-After: 60`. Default and hard cap: 20 jobs per hour. |
-| 503 `provider_unavailable` | `LINES_CREATIVE_PROVIDER=disabled`, or ffmpeg/ffprobe is missing. No row is written. `Retry-After: 30`. |
-| 400 | Bad JSON, missing idempotency key, bad tenant/customer. |
-| 401 / 403 / 413 / 415 | Auth, scope, body size, content type. |
-
-A failed or in-flight job is what a replay returns. To try again, send a new idempotency key.
-
-### `GET /v1/creative-jobs/{id}`
-
-Scope `jobs:read`. **404** when the id is unknown or owned by another tenant/customer.
-
-### `GET /v1/creative-jobs?status=&limit=&cursor=`
-
-Scope `jobs:read`. Only the header tenant and customer. `status` is `queued`, `running`, `succeeded`, `failed`, or `cancelled`. `limit` is 1–50, default 20. `nextCursor` is opaque; pass it back as `cursor`. Invalid cursor is **422**.
-
-### `POST /v1/creative-jobs/{id}/cancel`
-
-Scope `jobs:cancel`. Empty body, or `{}`.
-
-| Status | When |
-|---|---|
-| 200 | Queued job becomes `cancelled`. A second cancel of a cancelled job returns the same job. A running job is marked cancel-requested and the worker stops the encoder; poll until `cancelled`. |
-| 404 | Not owned. |
-| 409 `not_cancellable` | Already `succeeded` or `failed`. |
-
-No artifact is stored for a cancel.
-
-### `GET /v1/creative-jobs/{id}/artifacts/{artifactId}`
-
-Scope `artifacts:read`. Bytes of a stored render. Query parameters such as `url` are ignored and are not fetched.
-
-| Header | Value |
-|---|---|
-| `Content-Type` | `video/mp4` or `image/png` from the file we wrote, not from the caller |
-| `Content-Length` | byte size |
-| `X-Content-SHA256` | hex sha256 of those bytes |
-| `ETag` | quoted sha256 |
-| `X-Artifact-Classification` | `rendered` |
-| `Content-Disposition` | `attachment; filename="creative-{uuid}.mp4"` or `.png` |
-| `X-Content-Type-Options` | `nosniff` |
-| `Cache-Control` | `private, no-store` |
-
-**410 `expired`** after `expiresAt`. The file is deleted. The job can stay `succeeded` with an empty `artifacts` array. **404** for a missing, unowned, or non-rendered row. Paths that are not two UUIDs do not match this route.
-
-## Job body
+Or set `LINES_BOOTSTRAP_KEYS` (or `LINES_BOOTSTRAP_KEYS_FILE`, mode `0600`) to a JSON array. Tokens in that JSON are hashed on boot and not logged. Example shape, with placeholders rather than real secrets:
 
 ```json
-{
-  "id": "uuid",
-  "tenantId": "tenant-a",
-  "customerId": "cust-a",
-  "kind": "video",
-  "status": "succeeded",
-  "brief": {},
-  "provider": "local-ffmpeg",
-  "generative": false,
-  "paidCalls": false,
-  "attempt": 1,
-  "maxAttempts": 2,
-  "createdAt": "2026-11-09T00:00:00.000Z",
-  "updatedAt": "2026-11-09T00:00:00.000Z",
-  "startedAt": "2026-11-09T00:00:00.000Z",
-  "finishedAt": "2026-11-09T00:00:00.000Z",
-  "deadlineAt": "2026-11-09T00:03:00.000Z",
-  "heartbeatAt": "2026-11-09T00:00:00.000Z",
-  "error": null,
-  "billing": {
-    "payer": "experto",
-    "includedInServicePrice": true,
-    "extraGenerationFee": false,
-    "creditDeduction": false,
-    "paidProviderRequest": false
+[
+  {
+    "id": "experto-web",
+    "tenantId": "experto-web",
+    "kind": "app",
+    "token": "REPLACE_WITH_A_RANDOM_TOKEN",
+    "webhookSecret": "REPLACE_WITH_A_RANDOM_SECRET",
+    "scopes": ["jobs:write", "jobs:read", "jobs:cancel", "artifacts:read", "usage:read"],
+    "jobsPerHour": 20,
+    "videoSecondsPerMonth": 36000
   },
-  "publish": {
-    "performed": false,
-    "supported": false,
-    "requiresAdminReview": true,
-    "accountSource": "client-owned-via-gateway"
-  },
-  "artifacts": [
-    {
-      "id": "uuid",
-      "classification": "rendered",
-      "role": "master",
-      "mime": "video/mp4",
-      "byteSize": 12000,
-      "sha256": "hex",
-      "width": 640,
-      "height": 360,
-      "durationMs": 2000,
-      "expiresAt": "2026-11-16T00:00:00.000Z",
-      "lumaStdev": 21.4,
-      "uniformFrame": false,
-      "downloadPath": "/v1/creative-jobs/{jobId}/artifacts/{artifactId}"
-    }
-  ]
-}
+  {
+    "id": "mac-mini",
+    "kind": "worker",
+    "token": "REPLACE_WITH_A_WORKER_TOKEN",
+    "engines": ["moneyprinter"]
+  }
+]
 ```
 
-`error` is `{ "code", "message" }` or `null`. Disk paths are never returned.
+## Environment
 
-`classification` on a stored artifact is only `rendered`. The database check constraint rejects any other value, including a fixture. A frame whose luma standard deviation is below 8 (a black or flat test picture) fails the job with `artifact_rejected` and stores nothing.
+Set these on the Coolify app. Do not commit values.
 
-## Status, errors, idempotency, recovery
-
-Statuses: `queued`, `running`, `succeeded`, `failed`, `cancelled`.
-
-| `error.code` | Meaning |
+| Name | Role |
 |---|---|
-| `deadline_exceeded` | Still queued when `deadlineAt` passed (default 3 minutes, hard max 10). |
-| `render_timeout` | Encoder exceeded the job timeout (video: `durationMs * 4 + 8s`, still: 15s, hard max 45s). |
-| `render_failed` | Encoder exited non-zero. The client message is generic. |
-| `font_unavailable` | Arabic or Latin font file is not installed. |
-| `artifact_rejected` | Magic bytes, codec, dimensions, duration, size, audio, path, or flat-frame check failed. |
-| `provider_unavailable` | Provider disabled or not ready. Also the HTTP 503 code. |
-| `worker_lost` | Process died after the last allowed attempt. |
-| `cancelled` | Caller cancelled, or the worker stopped an in-flight render. |
+| `LINES_DATA_DIR` | Persistent directory. Required. In Docker, `/data`. |
+| `LINES_HOST` | Bind address. Docker default `0.0.0.0`. |
+| `LINES_PORT` | Default `8080`. |
+| `LINES_DEFAULT_ENGINE` | `moneyprinter` (production) or `template` (local demo). Stock styles follow this. |
+| `LINES_ENABLE_TEMPLATE` | `1` (default) keeps the ffmpeg title-card engine. `0` hides `style: "template"`. |
+| `LINES_BOOTSTRAP_KEYS` | JSON array above. Secret values. Not logged. |
+| `LINES_BOOTSTRAP_KEYS_FILE` | Absolute path to that JSON. Prefer this over the inline variable. |
+| `LINES_SIGNING_KEY` | HMAC key for short-lived artifact URLs. |
+| `LINES_JOBS_PER_HOUR` | Default quota for a new tenant. Default 20. Hard max 1000. |
+| `LINES_VIDEO_SECONDS_PER_MONTH` | Default monthly seconds. Default 36000. |
+| `LINES_MAX_CONCURRENCY` | Renders at once. Default 1. Hard max 8. |
+| `LINES_JOB_DEADLINE_MS` | Default 2 hours. |
+| `LINES_ARTIFACT_TTL_MS` | Default 14 days. |
+| `LINES_LEASE_MS` | Worker lease. Default 120000. |
+| `LINES_MAX_ATTEMPTS` | Default 2. |
+| `LINES_WEBHOOK_TIMEOUT_MS` | Default 8000. |
+| `LINES_WEBHOOK_MAX_ATTEMPTS` | Default 8. |
+| `LINES_WEBHOOK_PORTS` | Comma-separated. Default `443`. |
+| `LINES_TEMPLATE_TIMEOUT_MS` | ffmpeg budget for a template job. |
+| `LINES_SIGNED_URL_TTL_MS` | Default 15 minutes. |
+| `LINES_FFMPEG` / `LINES_FFPROBE` | Binary overrides. |
+| `LINES_FONT_ARABIC` / `LINES_FONT_ARABIC_FAMILY` | Template font override. |
+| `LINES_FONT_LATIN` / `LINES_FONT_LATIN_FAMILY` | Template font override. |
 
-HTTP error body: `{ "error": { "code", "message", "details"? } }`.
-
-Idempotency is stored with the job in SQLite (`creative.sqlite` under `LINES_CREATIVE_DATA_DIR`, WAL, fsync). One OS lock file (`worker.lock`) so a second process does not render the same queue. On boot, rows left `running` by a dead process are requeued when `attempt < maxAttempts` (2). At the last attempt they become `worker_lost`. A graceful shutdown puts the in-flight job back to `queued` and undoes that attempt so a deploy restart does not burn it. Heartbeats update during a render. Cancel of a running job aborts ffmpeg. Partial files under `tmp/` are removed. Only a probe-passed file is renamed into `artifacts/{jobId}/{artifactId}.mp4|png` and inserted in the same success transaction. Orphan files with no row are deleted on boot.
-
-Default artifact TTL is 7 days. Hard max is 30 days (`LINES_CREATIVE_ARTIFACT_TTL_MS`). Global renders default to 1 at a time (hard max 2). One running job per tenant.
-
-## What the renderer actually is
-
-`local-ffmpeg` draws the brief onto a solid background with libass (Arabic shaping when a Noto Naskh Arabic font is present, DejaVu Sans for Latin) and encodes H.264 yuv420p or a PNG. It is a real media file of the requested size and duration. It is not a generative video model, not a stock clip, and not a stand-in black video.
-
-No code path calls `fetch` or an HTTP client. `LINES_CREATIVE_PROVIDER` may be `local-ffmpeg` (default) or `disabled`. Any other name, including a paid vendor, refuses to boot. Child processes do not inherit the credential environment.
-
-Generation is billed inside the Experto service price: `billing.paidProviderRequest` is false and this API has no credit ledger. Publishing to the client's own ad account, after admin review, belongs to experto-web. This service has no OAuth and no publish route.
+Pixabay and the LLM key belong in MoneyPrinterTurbo's `config.toml` on the external drive, not in this service.
 
 ## Run
 
 ```bash
-npm test                 # from the repo: auth, IDOR, idempotency, concurrency, restart, validation, artifacts
+npm test          # from the repo: API tests and the Mac worker unit tests
 npm run lint
-node services/creative-api/src/index.js
+LINES_DATA_DIR=/tmp/lines-data LINES_ENABLE_TEMPLATE=1 node services/creative-api/src/index.js
 ```
 
-The API image is `services/creative-api/Dockerfile` (ffmpeg, Noto Naskh Arabic, DejaVu, port 8080, volume `/data`). It is not part of the marketing `Dockerfile`. Do not point the public nginx site at this process for browsers.
+Docker, from the repo root, context is the service directory so the marketing `.dockerignore` does not apply:
 
-Persistent `LINES_CREATIVE_DATA_DIR` is required. Without it, a new container disk loses jobs and files. The credential file should be mode `0600`; a looser mode logs `credentials_file_perms` and does not print the secret.
+```bash
+docker build -t lines-video-api services/creative-api
+docker run --rm -p 8080:8080 -v lines-video-data:/data lines-video-api
+curl -fsS http://127.0.0.1:8080/v1/health
+```
+
+Coolify: new application, Dockerfile `services/creative-api/Dockerfile`, build context `services/creative-api`, port 8080, domain `api.lines.studio`, one instance, volume mounted at `/data`. Do not point the marketing nginx at this process.
+
+Contract file: `docs/video-api.openapi.yaml`. Caller guide: `docs/video-api-integration.md`.
 
 ## Not launch-ready
 
-- Coolify still serves only the static site. This API is not deployed.
-- experto-web and the app are separate workstreams and are not wired here.
-- A generative or paid video vendor is not configured. Turning one on would be a new explicit change; the default cannot make that call.
-- Live ad publish is intentionally absent.
-- No production migration is included; the sqlite file is created on first boot of this service.
+This API is not deployed. A paid or generative vendor is not configured. Publishing ads is out of scope. Do not merge or launch without a QA pass and an explicit decision to point Coolify at this image.

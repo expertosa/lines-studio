@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.lines.video-worker</string>
+  <key>WorkingDirectory</key>
+  <string>/Volumes/Data/lines-video-worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Volumes/Data/lines-video-worker/app/src/index.js</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LINES_WORKER_ROOT</key>
+    <string>/Volumes/Data/lines-video-worker</string>
+    <key>LINES_API_BASE</key>
+    <string>https://api.lines.studio</string>
+    <key>LINES_WORKER_TOKEN_FILE</key>
+    <string>/Volumes/Data/lines-video-worker/secrets/worker-token</string>
+    <key>MPT_BASE_URL</key>
+    <string>http://127.0.0.1:8080</string>
+    <key>MPT_CHECKOUT</key>
+    <string>/Volumes/Data/lines-video-worker/MoneyPrinterTurbo</string>
+    <key>MPT_FONT_NAME</key>
+    <string>NotoNaskhArabic-Regular.ttf</string>
+    <key>TMPDIR</key>
+    <string>/Volumes/Data/lines-video-worker/tmp</string>
+    <key>XDG_CACHE_HOME</key>
+    <string>/Volumes/Data/lines-video-worker/cache</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Volumes/Data/lines-video-worker/logs/worker.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Volumes/Data/lines-video-worker/logs/worker.err.log</string>
+</dict>
+</plist>

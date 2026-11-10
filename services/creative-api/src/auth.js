@@ -1,127 +1,61 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
-import { SCOPES } from './constants.js';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { APP_SCOPES, WORKER_SCOPE } from './constants.js';
 import { ApiError } from './errors.js';
 
-const SCOPE_SET = new Set(SCOPES);
-const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
-const TENANT_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const TOKEN_RE = /^[A-Za-z0-9._~+/=_-]+$/;
+const END_USER_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const FORBIDDEN_QUERY = ['access_token', 'token', 'api_key', 'key', 'authorization'];
 
-function sha256(value) {
-  return createHash('sha256').update(value).digest();
+export function hashToken(token) {
+  return createHash('sha256').update(token).digest('hex');
 }
 
-function hashesEqual(left, right) {
-  return left.length === right.length && timingSafeEqual(left, right);
+export function tokenPrefix(token) {
+  return token.slice(0, 12);
 }
 
-export function parseCredentials(raw) {
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('LINES_CREATIVE_CREDENTIALS is not valid JSON');
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error('LINES_CREATIVE_CREDENTIALS must be a non-empty array');
-  }
-  const credentials = [];
-  const seenTokens = [];
-  for (const entry of parsed) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      throw new Error('Each credential must be an object');
-    }
-    const keys = Object.keys(entry);
-    for (const key of keys) {
-      if (!['id', 'token', 'tenants', 'scopes'].includes(key)) {
-        throw new Error('Credential contains an unsupported field');
-      }
-    }
-    if (typeof entry.id !== 'string' || !ID_RE.test(entry.id)) {
-      throw new Error('Credential id is invalid');
-    }
-    if (typeof entry.token !== 'string' || !/^[A-Za-z0-9._~+/-]+=*$/.test(entry.token) || entry.token.length < 24 || entry.token.length > 256) {
-      throw new Error('Credential token must be 24 to 256 URL-safe characters');
-    }
-    if (!Array.isArray(entry.tenants) || entry.tenants.length === 0) {
-      throw new Error('Credential tenants must be a non-empty array');
-    }
-    const tenants = [];
-    for (const tenant of entry.tenants) {
-      if (tenant === '*') {
-        tenants.push('*');
-        continue;
-      }
-      if (typeof tenant !== 'string' || !TENANT_RE.test(tenant)) {
-        throw new Error('Credential tenant id is invalid');
-      }
-      tenants.push(tenant);
-    }
-    if (!Array.isArray(entry.scopes) || entry.scopes.length === 0) {
-      throw new Error('Credential scopes must be a non-empty array');
-    }
-    const scopes = [];
-    for (const scope of entry.scopes) {
-      if (!SCOPE_SET.has(scope)) throw new Error('Credential scope is invalid');
-      scopes.push(scope);
-    }
-    const tokenHash = sha256(entry.token);
-    for (const existing of seenTokens) {
-      if (hashesEqual(existing, tokenHash)) throw new Error('Credential tokens must be unique');
-    }
-    seenTokens.push(tokenHash);
-    credentials.push({
-      id: entry.id,
-      tokenHash,
-      tenants: Object.freeze(tenants),
-      scopes: Object.freeze(new Set(scopes)),
-    });
-  }
-  return Object.freeze(credentials);
+export function generateToken() {
+  return `lns_${randomBytes(32).toString('base64url')}`;
 }
 
-export function loadCredentialsFromEnv(env = process.env) {
-  const file = env.LINES_CREATIVE_CREDENTIALS_FILE;
-  let raw;
-  let permissive = false;
-  if (file) {
-    if (!path.isAbsolute(file)) {
-      throw new Error('LINES_CREATIVE_CREDENTIALS_FILE must be an absolute path');
-    }
-    const stat = fs.statSync(file);
-    permissive = (stat.mode & 0o077) !== 0;
-    raw = fs.readFileSync(file, 'utf8');
-  } else if (env.LINES_CREATIVE_CREDENTIALS) {
-    raw = env.LINES_CREATIVE_CREDENTIALS;
-  } else {
-    throw new Error('Set LINES_CREATIVE_CREDENTIALS_FILE or LINES_CREATIVE_CREDENTIALS');
-  }
-  return { credentials: parseCredentials(raw), credentialsFilePermissive: permissive };
+export function generateSecret() {
+  return randomBytes(32).toString('base64url');
 }
 
-export function authenticate(credentials, token) {
-  if (typeof token !== 'string' || token.length < 24 || token.length > 256) return null;
-  const incoming = sha256(token);
-  let match = null;
-  for (const credential of credentials) {
-    if (hashesEqual(credential.tokenHash, incoming)) match = credential;
-  }
-  return match;
+export function hashesEqual(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') return false;
+  const a = Buffer.from(left);
+  const b = Buffer.from(right);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function tenantAllowed(credential, tenantId) {
-  return credential.tenants.includes('*') || credential.tenants.includes(tenantId);
+export function assertTokenShape(token) {
+  return typeof token === 'string' && token.length >= 24 && token.length <= 256 && TOKEN_RE.test(token);
 }
 
 export function readBearer(header) {
   if (Array.isArray(header) || typeof header !== 'string') return null;
-  const match = header.match(/^Bearer ([A-Za-z0-9._~+/-]+=*)$/);
-  if (!match) return null;
+  const match = header.match(/^Bearer ([A-Za-z0-9._~+/=_-]+)$/);
+  if (!match || !assertTokenShape(match[1])) return null;
   return match[1];
 }
 
-const FORBIDDEN_QUERY = ['access_token', 'token', 'api_key', 'tenantId', 'customerId'];
+export function singleHeader(req, name) {
+  const value = req.headers[name];
+  if (Array.isArray(value)) {
+    throw new ApiError(400, 'invalid_request', 'Repeated headers are not allowed.');
+  }
+  return value;
+}
+
+export function endUserId(req) {
+  const value = singleHeader(req, 'x-end-user-id');
+  if (value === undefined) return null;
+  if (typeof value !== 'string' || !END_USER_RE.test(value)) {
+    throw new ApiError(400, 'invalid_end_user', 'X-End-User-Id is invalid.');
+  }
+  return value;
+}
 
 export function assertNoCredentialQuery(req) {
   let url;
@@ -132,35 +66,55 @@ export function assertNoCredentialQuery(req) {
   }
   for (const name of FORBIDDEN_QUERY) {
     if (url.searchParams.has(name)) {
-      throw new ApiError(400, 'invalid_request', 'Identity must be sent in headers.');
+      throw new ApiError(400, 'invalid_request', 'Credentials must be sent in the Authorization header.');
     }
   }
+  return url;
 }
 
-export function assertIdentity(req, credentials, scope) {
+export function authenticate(store, token) {
+  if (!assertTokenShape(token)) return null;
+  const incoming = hashToken(token);
+  const key = store.getActiveKeyByHash(incoming);
+  if (!key || !hashesEqual(key.tokenHash, incoming)) return null;
+  return key;
+}
+
+function requireKey(req, store) {
   assertNoCredentialQuery(req);
-  const token = readBearer(req.headers.authorization);
-  const credential = token ? authenticate(credentials, token) : null;
-  if (!credential) {
-    throw new ApiError(401, 'unauthorized', 'Authentication is required.');
+  const token = readBearer(singleHeader(req, 'authorization'));
+  const key = token ? authenticate(store, token) : null;
+  if (!key) throw new ApiError(401, 'unauthorized', 'Authentication is required.');
+  return key;
+}
+
+export function assertApp(req, store, scope) {
+  const key = requireKey(req, store);
+  if (key.kind !== 'app') {
+    throw new ApiError(403, 'forbidden', 'This credential cannot call that route.');
   }
-  const tenantHeader = req.headers['x-tenant-id'];
-  const customerHeader = req.headers['x-customer-id'];
-  if (Array.isArray(tenantHeader) || typeof tenantHeader !== 'string' || !TENANT_RE.test(tenantHeader)) {
-    throw new ApiError(400, 'invalid_tenant', 'X-Tenant-Id is required.');
+  if (!key.scopes.includes(scope)) {
+    throw new ApiError(403, 'forbidden', 'This credential does not have the required scope.');
   }
-  if (Array.isArray(customerHeader) || typeof customerHeader !== 'string' || !TENANT_RE.test(customerHeader)) {
-    throw new ApiError(400, 'invalid_customer', 'X-Customer-Id is required.');
-  }
-  if (!tenantAllowed(credential, tenantHeader)) {
-    throw new ApiError(403, 'forbidden', 'This credential cannot act for that tenant.');
-  }
-  if (!credential.scopes.has(scope)) {
+  if (!APP_SCOPES.includes(scope)) {
     throw new ApiError(403, 'forbidden', 'This credential does not have the required scope.');
   }
   return {
-    credentialId: credential.id,
-    tenantId: tenantHeader,
-    customerId: customerHeader,
+    keyId: key.id,
+    kind: 'app',
+    tenantId: key.tenantId,
+    endUserId: endUserId(req),
+  };
+}
+
+export function assertWorker(req, store) {
+  const key = requireKey(req, store);
+  if (key.kind !== 'worker' || !key.scopes.includes(WORKER_SCOPE)) {
+    throw new ApiError(403, 'forbidden', 'A worker credential is required.');
+  }
+  return {
+    keyId: key.id,
+    kind: 'worker',
+    engines: key.engines,
   };
 }

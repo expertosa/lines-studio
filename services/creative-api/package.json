@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test test/*.test.js",
-    "lint": "node scripts/check-syntax.js"
+    "lint": "node scripts/check-syntax.js",
+    "keys": "node src/keys-cli.js"
   }
 }

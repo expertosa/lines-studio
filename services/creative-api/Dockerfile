@@ -1,5 +1,6 @@
-# Separate from the static marketing image. Requires a writable data volume
-# and LINES_CREATIVE_CREDENTIALS_FILE mounted at runtime. No provider keys.
+# Separate Coolify app from the static marketing site.
+# Persistent volume: mount it on /data (SQLite, artifacts, temp renders).
+# One replica. SQLite is not safe with two writers.
 FROM node:22-alpine
 RUN apk add --no-cache ffmpeg font-noto-arabic font-dejavu \
   && mkdir -p /data \
@@ -9,10 +10,11 @@ COPY package.json ./
 COPY src ./src
 USER node
 ENV NODE_ENV=production \
-  LINES_CREATIVE_HOST=0.0.0.0 \
-  LINES_CREATIVE_PORT=8080 \
-  LINES_CREATIVE_DATA_DIR=/data \
-  LINES_CREATIVE_PROVIDER=local-ffmpeg
+  LINES_HOST=0.0.0.0 \
+  LINES_PORT=8080 \
+  LINES_DATA_DIR=/data \
+  LINES_DEFAULT_ENGINE=moneyprinter \
+  LINES_ENABLE_TEMPLATE=1
 EXPOSE 8080
 VOLUME /data
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \

@@ -34,9 +34,9 @@ npm run build    # يطلع موقع ثابت في مجلد out/
 | `app/globals.css` | الهوية: الألوان والخطوط والأشكال |
 | `components/OrderForm.jsx` | نموذج الطلب، يرسل ملخص الطلب على واتساب |
 
-## واجهة مهام الإبداع (فيديو / إعلان)
+## واجهة الفيديو
 
-الموقع الثابت يبقى على nginx كما هو. واجهة إنشاء الفيديو والإعلان خدمة منفصلة داخل `services/creative-api/`، يستدعيها خادم experto-web ولا تُوضع أسرارها في تطبيق الجوال. العقد في `services/creative-api/README.md`.
+الموقع الثابت يبقى على nginx كما هو. توليد الفيديو خدمة منفصلة: `services/creative-api/` على Coolify كتطبيق مستقل (الهدف `api.lines.studio`)، وعامل السحب على الماك ميني في `services/mac-video-worker/`. تطبيقات اكسبرتو تنادي الواجهة من خادمها. تطبيق الجوال لا يحمل مفتاح الواجهة. العقد في `docs/video-api.openapi.yaml` و`services/creative-api/README.md`.
 
 ## إضافة تصميم جديد للمعرض
 

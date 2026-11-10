@@ -1,51 +1,64 @@
-/** Hard ceilings. Environment values may only lower a limit. */
+/** Hard ceilings. Environment values may only lower a limit, except where noted. */
 export const HARD = Object.freeze({
-  maxJobsPerHour: 20,
-  maxRunningGlobal: 2,
-  maxRunningPerTenant: 1,
-  maxDurationMs: 10_000,
-  minDurationMs: 2_000,
-  maxArtifactBytes: 20 * 1024 * 1024,
-  minVideoBytes: 2_000,
-  minImageBytes: 800,
-  maxArtifactTtlMs: 30 * 24 * 60 * 60 * 1000,
-  defaultArtifactTtlMs: 7 * 24 * 60 * 60 * 1000,
-  maxDeadlineMs: 10 * 60 * 1000,
-  defaultDeadlineMs: 3 * 60 * 1000,
-  maxTimeoutMs: 45_000,
-  maxAttempts: 2,
-  maxBodyBytes: 8_192,
+  maxJobsPerHour: 1000,
+  maxVideoSecondsPerMonth: 500_000,
+  maxConcurrency: 8,
+  maxDeadlineMs: 24 * 60 * 60 * 1000,
+  maxArtifactTtlMs: 90 * 24 * 60 * 60 * 1000,
+  maxLeaseMs: 15 * 60 * 1000,
+  maxAttempts: 5,
+  maxBodyBytes: 32 * 1024,
+  maxVideoBytes: 200 * 1024 * 1024,
+  maxThumbBytes: 5 * 1024 * 1024,
+  minVideoBytes: 1500,
+  minThumbBytes: 40,
   minLumaStdev: 8,
-  presets: Object.freeze([
-    [1080, 1920],
-    [1920, 1080],
-    [1080, 1080],
-    [720, 1280],
-    [1280, 720],
-    [640, 360],
-  ]),
+  maxSignedUrlTtlMs: 60 * 60 * 1000,
+  maxWebhookAttempts: 10,
 });
 
-export const BILLING = Object.freeze({
-  payer: 'experto',
-  includedInServicePrice: true,
-  extraGenerationFee: false,
-  creditDeduction: false,
-  paidProviderRequest: false,
+export const DEFAULTS = Object.freeze({
+  jobsPerHour: 20,
+  videoSecondsPerMonth: 36_000,
+  maxConcurrency: 1,
+  deadlineMs: 2 * 60 * 60 * 1000,
+  artifactTtlMs: 14 * 24 * 60 * 60 * 1000,
+  leaseMs: 120_000,
+  maxAttempts: 2,
+  webhookTimeoutMs: 8_000,
+  webhookMaxAttempts: 8,
+  templateTimeoutMs: 90_000,
+  signedUrlTtlMs: 15 * 60 * 1000,
+  webhookBackoffMs: Object.freeze([5_000, 15_000, 45_000, 120_000, 300_000, 900_000, 1_800_000, 3_600_000]),
 });
 
-export const PUBLISH = Object.freeze({
-  performed: false,
-  supported: false,
-  requiresAdminReview: true,
-  accountSource: 'client-owned-via-gateway',
-});
-
-export const SCOPES = Object.freeze([
+export const APP_SCOPES = Object.freeze([
   'jobs:write',
   'jobs:read',
   'jobs:cancel',
   'artifacts:read',
+  'usage:read',
 ]);
 
-export const ALLOWED_PROVIDERS = Object.freeze(['local-ffmpeg', 'disabled']);
+export const WORKER_SCOPE = 'worker:run';
+
+export const JOB_STATUSES = Object.freeze(['queued', 'running', 'succeeded', 'failed', 'cancelled']);
+export const FORMATS = Object.freeze(['9:16', '16:9', '1:1']);
+export const LANGUAGES = Object.freeze(['ar', 'en']);
+export const SECONDS = Object.freeze([15, 30, 60]);
+
+/** Nominal pixels for the MoneyPrinterTurbo engine (1080p). */
+export const NOMINAL_SIZE = Object.freeze({
+  '9:16': Object.freeze({ width: 1080, height: 1920 }),
+  '16:9': Object.freeze({ width: 1920, height: 1080 }),
+  '1:1': Object.freeze({ width: 1080, height: 1080 }),
+});
+
+/** Small frame the built-in template engine actually encodes. */
+export const TEMPLATE_SIZE = Object.freeze({
+  '9:16': Object.freeze({ width: 360, height: 640 }),
+  '16:9': Object.freeze({ width: 640, height: 360 }),
+  '1:1': Object.freeze({ width: 360, height: 360 }),
+});
+
+export const BUILTIN_WORKER_ID = 'builtin:template';

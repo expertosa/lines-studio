@@ -1,137 +1,168 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
-import { api, gateway, startApp, TOKENS, videoBrief } from './helpers.js';
+import { hashToken } from '../src/auth.js';
+import { installAppKey } from '../src/keys.js';
+import { resolveLimits } from '../src/limits.js';
+import {
+  APP_TOKEN,
+  OTHER_TOKEN,
+  READ_TOKEN,
+  WORKER_TOKEN,
+  WEBHOOK_SECRET,
+  api,
+  createJob,
+  createTestApp,
+  serviceRoot,
+} from './helpers.js';
 
-async function withApp(t, overrides) {
-  const ctx = await startApp({ providerName: 'disabled', ...overrides });
-  t.after(() => ctx.close());
-  return ctx;
-}
-
-test('health is public and does not claim a paid provider is ready', async (t) => {
-  const ctx = await withApp(t);
-  const res = await api(ctx.base, { path: '/v1/health' });
-  assert.equal(res.status, 200);
-  assert.equal(res.json.ok, true);
-  assert.equal(res.json.ready, false);
-  assert.equal(res.json.paidCalls, false);
-  assert.equal(res.json.publishSupported, false);
-  assert.equal(res.json.fixtureFulfillment, false);
-  assert.deepEqual(res.json.capabilities, []);
-  assert.equal(res.headers.get('access-control-allow-origin'), null);
+test('health is public and responses carry no CORS header', async () => {
+  const ctx = await createTestApp();
+  try {
+    const health = await api(ctx.app, 'GET', '/v1/health');
+    assert.equal(health.status, 200);
+    assert.equal(health.json.ok, true);
+    assert.equal(health.json.service, 'lines-video-api');
+    assert.equal(health.json.engines.external.configured, false);
+    assert.equal(health.headers.get('access-control-allow-origin'), null);
+    const options = await api(ctx.app, 'OPTIONS', '/v1/jobs');
+    assert.equal(options.status, 404);
+    assert.equal(options.headers.get('access-control-allow-origin'), null);
+  } finally {
+    await ctx.close();
+  }
 });
 
-test('missing, malformed, and unknown tokens are unauthorized', async (t) => {
-  const ctx = await withApp(t);
-  const body = videoBrief();
-  const missing = await api(ctx.base, {
-    method: 'POST', path: '/v1/creative-jobs', body, idempotency: 'idem-auth-0001', ...gateway({ token: undefined }),
-  });
-  assert.equal(missing.status, 401);
-  assert.equal(missing.json.error.code, 'unauthorized');
-  const bad = await api(ctx.base, {
-    method: 'POST', path: '/v1/creative-jobs', body, idempotency: 'idem-auth-0001', token: 'not-a-real-token-value-at-all',
-    tenant: 'tenant-a', customer: 'cust-a',
-  });
-  assert.equal(bad.status, 401);
-  const basic = await api(ctx.base, {
-    method: 'GET', path: '/v1/health', headers: { authorization: 'Basic gateway-token-0123456789abcdef' },
-  });
-  assert.equal(basic.status, 200);
-  const job = await api(ctx.base, {
-    method: 'GET', path: '/v1/creative-jobs', headers: { authorization: 'Basic gateway-token-0123456789abcdef' },
-    tenant: 'tenant-a', customer: 'cust-a',
-  });
-  assert.equal(job.status, 401);
+test('rejects missing, wrong, revoked, and query-string credentials', async () => {
+  const ctx = await createTestApp();
+  try {
+    const missing = await createJob(ctx.app, null);
+    assert.equal(missing.status, 401);
+    const wrong = await createJob(ctx.app, 'not-a-real-token-0123456789');
+    assert.equal(wrong.status, 401);
+    const query = await api(ctx.app, 'GET', '/v1/jobs?token=test-app-token-experto-web-aaa', { token: APP_TOKEN });
+    assert.equal(query.status, 400);
+    const apiKey = await api(ctx.app, 'GET', '/v1/styles?api_key=abcdef', { token: APP_TOKEN });
+    assert.equal(apiKey.status, 400);
+    ctx.app.store.revokeKey('experto-web');
+    const revoked = await api(ctx.app, 'GET', '/v1/styles', { token: APP_TOKEN });
+    assert.equal(revoked.status, 401);
+  } finally {
+    await ctx.close();
+  }
 });
 
-test('token in the query string is rejected', async (t) => {
-  const ctx = await withApp(t);
-  const res = await api(ctx.base, {
-    path: `/v1/health?access_token=${TOKENS.gateway}`,
-  });
-  assert.equal(res.status, 400);
-  assert.equal(res.json.error.code, 'invalid_request');
+test('scopes are not implied and worker tokens cannot create jobs', async () => {
+  const ctx = await createTestApp();
+  try {
+    installAppKey(ctx.app.store, {
+      id: 'reader',
+      tenantId: 'experto-web',
+      token: READ_TOKEN,
+      webhookSecret: WEBHOOK_SECRET,
+      scopes: ['jobs:read'],
+    }, resolveLimits());
+    const denied = await createJob(ctx.app, READ_TOKEN);
+    assert.equal(denied.status, 403);
+    const allowed = await api(ctx.app, 'GET', '/v1/styles', { token: READ_TOKEN });
+    assert.equal(allowed.status, 200);
+    assert.ok(allowed.json.styles.some((style) => style.id === 'promo'));
+    const quote = await api(ctx.app, 'GET', '/v1/quote?seconds=30&style=promo&format=9:16&language=ar', { token: APP_TOKEN });
+    assert.equal(quote.status, 200);
+    assert.equal(quote.json.amount, 0);
+    assert.equal(quote.json.engine, 'moneyprinter');
+    assert.equal(quote.json.voice, 'ar-SA-HamedNeural');
+    const workerCreate = await createJob(ctx.app, WORKER_TOKEN);
+    assert.equal(workerCreate.status, 403);
+    const appClaim = await api(ctx.app, 'POST', '/v1/worker/claim', { token: APP_TOKEN, body: {} });
+    assert.equal(appClaim.status, 403);
+    const usageDenied = await api(ctx.app, 'GET', '/v1/usage', { token: READ_TOKEN });
+    assert.equal(usageDenied.status, 403);
+  } finally {
+    await ctx.close();
+  }
 });
 
-test('tenant and customer are required and a scoped token cannot cross tenants', async (t) => {
-  const ctx = await startApp({ provider: (await import('./helpers.js')).holdProvider(), worker: false });
-  t.after(() => ctx.close());
-  const created = await api(ctx.base, {
-    method: 'POST', path: '/v1/creative-jobs', body: videoBrief(), idempotency: 'idem-owner-001',
-    token: TOKENS.tenantA, tenant: 'tenant-a', customer: 'cust-a',
-  });
-  assert.equal(created.status, 201);
-  const id = created.json.id;
-
-  const missingTenant = await api(ctx.base, {
-    method: 'GET', path: `/v1/creative-jobs/${id}`, token: TOKENS.tenantA, customer: 'cust-a',
-  });
-  assert.equal(missingTenant.status, 400);
-  assert.equal(missingTenant.json.error.code, 'invalid_tenant');
-
-  const otherTenantHeader = await api(ctx.base, {
-    method: 'GET', path: `/v1/creative-jobs/${id}`, token: TOKENS.tenantA, tenant: 'tenant-b', customer: 'cust-a',
-  });
-  assert.equal(otherTenantHeader.status, 403);
-
-  const otherTenantToken = await api(ctx.base, {
-    method: 'GET', path: `/v1/creative-jobs/${id}`, token: TOKENS.tenantB, tenant: 'tenant-b', customer: 'cust-a',
-  });
-  assert.equal(otherTenantToken.status, 404);
-
-  const otherCustomer = await api(ctx.base, {
-    method: 'GET', path: `/v1/creative-jobs/${id}`, token: TOKENS.tenantA, tenant: 'tenant-a', customer: 'cust-b',
-  });
-  assert.equal(otherCustomer.status, 404);
-
-  const queryOverride = await api(ctx.base, {
-    path: `/v1/creative-jobs/${id}?tenantId=tenant-b&customerId=cust-b`,
-    token: TOKENS.tenantA, tenant: 'tenant-a', customer: 'cust-a',
-  });
-  assert.equal(queryOverride.status, 400);
-
-  const owner = await api(ctx.base, {
-    method: 'GET', path: `/v1/creative-jobs/${id}`, token: TOKENS.tenantA, tenant: 'tenant-a', customer: 'cust-a',
-  });
-  assert.equal(owner.status, 200);
-  assert.equal(owner.json.customerId, 'cust-a');
+test('the key CLI prints a new token once and never prints the stored hash', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lines-keys-'));
+  try {
+    const created = spawnSync(process.execPath, [
+      path.join(serviceRoot, 'src/keys-cli.js'),
+      'create-app',
+      '--tenant', 'experto-web',
+    ], {
+      env: { ...process.env, LINES_DATA_DIR: dataDir },
+      encoding: 'utf8',
+    });
+    assert.equal(created.status, 0, created.stderr);
+    const token = created.stdout.match(/token: (\S+)/)?.[1];
+    assert.ok(token);
+    const hash = hashToken(token);
+    assert.equal(created.stdout.includes(hash), false);
+    assert.equal((created.stderr || '').includes(hash), false);
+    assert.match(created.stdout, /webhookSecret: \S+/);
+    const listed = spawnSync(process.execPath, [
+      path.join(serviceRoot, 'src/keys-cli.js'),
+      'list',
+    ], {
+      env: { ...process.env, LINES_DATA_DIR: dataDir },
+      encoding: 'utf8',
+    });
+    assert.equal(listed.status, 0, listed.stderr);
+    assert.equal(listed.stdout.includes(token), false);
+    assert.equal(listed.stdout.includes(hash), false);
+    assert.equal(listed.stdout.includes('webhookSecret'), false);
+    const rotated = spawnSync(process.execPath, [
+      path.join(serviceRoot, 'src/keys-cli.js'),
+      'rotate-key',
+      '--id', 'experto-web',
+    ], {
+      env: { ...process.env, LINES_DATA_DIR: dataDir },
+      encoding: 'utf8',
+    });
+    assert.equal(rotated.status, 0, rotated.stderr);
+    const next = rotated.stdout.match(/token: (\S+)/)?.[1];
+    assert.notEqual(next, token);
+    assert.equal(rotated.stdout.includes(hashToken(next)), false);
+    assert.equal(rotated.stdout.includes('webhookSecret'), false);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
 });
 
-test('scopes are enforced independently of a valid token', async (t) => {
-  const ctx = await startApp({ provider: (await import('./helpers.js')).holdProvider() });
-  t.after(() => ctx.close());
-  const write = await api(ctx.base, {
-    method: 'POST', path: '/v1/creative-jobs', body: videoBrief(), idempotency: 'idem-scope-001',
-    token: TOKENS.readOnly, tenant: 'tenant-a', customer: 'cust-a',
+test('a rotated key replaces the previous bearer', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lines-rotate-'));
+  const created = spawnSync(process.execPath, [
+    path.join(serviceRoot, 'src/keys-cli.js'),
+    'create-app',
+    '--tenant', 'experto-web',
+  ], {
+    env: { ...process.env, LINES_DATA_DIR: dataDir },
+    encoding: 'utf8',
   });
-  assert.equal(write.status, 403);
-  const created = await api(ctx.base, {
-    method: 'POST', path: '/v1/creative-jobs', body: videoBrief(), idempotency: 'idem-scope-002',
-    token: TOKENS.writeOnly, tenant: 'tenant-a', customer: 'cust-a',
-  });
-  assert.equal(created.status, 201);
-  const read = await api(ctx.base, {
-    method: 'GET', path: `/v1/creative-jobs/${created.json.id}`,
-    token: TOKENS.writeOnly, tenant: 'tenant-a', customer: 'cust-a',
-  });
-  assert.equal(read.status, 403);
-  const cancel = await api(ctx.base, {
-    method: 'POST', path: `/v1/creative-jobs/${created.json.id}/cancel`,
-    token: TOKENS.writeOnly, tenant: 'tenant-a', customer: 'cust-a',
-  });
-  assert.equal(cancel.status, 403);
-});
-
-test('traversal and unknown routes do not reveal files', async (t) => {
-  const ctx = await withApp(t);
-  const traversed = await api(ctx.base, {
-    path: '/v1/creative-jobs/../../etc/passwd',
-    ...gateway(),
-  });
-  assert.equal(traversed.status, 404);
-  const missing = await api(ctx.base, { path: '/v1/admin', ...gateway() });
-  assert.equal(missing.status, 404);
-  const method = await api(ctx.base, { method: 'DELETE', path: '/v1/health' });
-  assert.equal(method.status, 405);
+  const token = created.stdout.match(/token: (\S+)/)[1];
+  const ctx = await createTestApp({ keys: [], workerKeys: [], dataDir });
+  try {
+    const ok = await api(ctx.app, 'GET', '/v1/styles', { token });
+    assert.equal(ok.status, 200);
+    const rotated = spawnSync(process.execPath, [
+      path.join(serviceRoot, 'src/keys-cli.js'),
+      'rotate-key',
+      '--id', 'experto-web',
+    ], {
+      env: { ...process.env, LINES_DATA_DIR: dataDir },
+      encoding: 'utf8',
+    });
+    const next = rotated.stdout.match(/token: (\S+)/)[1];
+    const old = await api(ctx.app, 'GET', '/v1/styles', { token });
+    const fresh = await api(ctx.app, 'GET', '/v1/styles', { token: next });
+    assert.equal(old.status, 401);
+    assert.equal(fresh.status, 200);
+    assert.equal(OTHER_TOKEN.length > 0, true);
+  } finally {
+    await ctx.close();
+  }
 });

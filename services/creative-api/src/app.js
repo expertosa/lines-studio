@@ -1,13 +1,15 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { ALLOWED_PROVIDERS } from './constants.js';
+import { lookup as dnsLookup } from 'node:dns/promises';
+import { createWorker } from './worker.js';
 import { createHandler } from './http.js';
 import { resolveLimits } from './limits.js';
 import { safeJoin } from './paths.js';
-import { createDisabledProvider, createLocalProvider } from './render/local-ffmpeg.js';
+import { createTemplateEngine } from './engines/template.js';
 import { openStore } from './store.js';
-import { createWorker } from './worker.js';
+import { applyBootstrap } from './bootstrap.js';
+import { installAppKey, installWorkerKey } from './keys.js';
 
 function alive(pid) {
   try {
@@ -41,8 +43,8 @@ function acquireLock(dir) {
         pid = 0;
       }
       if (pid && alive(pid)) {
-        const busy = new Error('worker_already_running');
-        busy.code = 'worker_already_running';
+        const busy = new Error('api_already_running');
+        busy.code = 'api_already_running';
         throw busy;
       }
       try {
@@ -52,8 +54,8 @@ function acquireLock(dir) {
       }
     }
   }
-  const busy = new Error('worker_already_running');
-  busy.code = 'worker_already_running';
+  const busy = new Error('api_already_running');
+  busy.code = 'api_already_running';
   throw busy;
 }
 
@@ -66,56 +68,71 @@ function walkFiles(dir, visit) {
   }
 }
 
+async function defaultLookup(hostname) {
+  const records = await dnsLookup(hostname, { all: true, verbatim: true });
+  return records.map((record) => record.address);
+}
+
 export async function createApp(options) {
   if (!options?.dataDir) throw new Error('dataDir is required');
-  if (!Array.isArray(options.credentials) || options.credentials.length === 0) {
-    throw new Error('credentials are required');
+  const defaultEngine = options.defaultEngine || 'moneyprinter';
+  if (!['moneyprinter', 'template'].includes(defaultEngine)) {
+    throw new Error('default engine is not available');
   }
-  const providerName = options.providerName || 'local-ffmpeg';
-  if (options.provider && !options.allowProviderOverride) {
-    throw new Error('provider override is not allowed');
+  const enableTemplate = options.enableTemplate !== undefined ? Boolean(options.enableTemplate) : true;
+  if (defaultEngine === 'template' && !enableTemplate) {
+    throw new Error('template engine is disabled');
   }
-  if (!options.provider && !ALLOWED_PROVIDERS.includes(providerName)) {
-    throw new Error('Unsupported provider. Paid and remote providers are not enabled.');
-  }
-  const provider = options.provider
-    || (providerName === 'disabled' ? createDisabledProvider() : createLocalProvider(options));
-  if (provider.paidCalls !== false || provider.generative !== false) {
-    throw new Error('Paid or generative providers are not enabled.');
-  }
-  if (typeof provider.check === 'function') await provider.check();
-
+  const template = createTemplateEngine(options);
+  if (enableTemplate) await template.check();
   fs.mkdirSync(options.dataDir, { recursive: true });
   const tmpDir = path.join(options.dataDir, 'tmp');
   fs.mkdirSync(tmpDir, { recursive: true });
   const releaseLock = acquireLock(options.dataDir);
   const now = options.now || (() => Date.now());
-  const store = openStore(options.dataDir, { now });
   const limits = resolveLimits(options.limits);
+  let store;
+  try {
+    store = openStore(options.dataDir, { now });
+    for (const key of options.keys || []) installAppKey(store, key, limits);
+    for (const key of options.workerKeys || []) installWorkerKey(store, key);
+    if (options.bootstrap?.length) applyBootstrap(store, options.bootstrap, limits);
+  } catch (error) {
+    try {
+      store?.close();
+    } catch {
+      // The original error is the one callers need.
+    }
+    releaseLock();
+    throw error;
+  }
   const log = options.log || ((level, fields) => {
     console.error(JSON.stringify({ level, time: new Date(now()).toISOString(), ...fields }));
   });
   const ctx = {
-    credentials: options.credentials,
-    provider,
     store,
     now,
     limits,
     dataDir: options.dataDir,
     tmpDir,
-    ffmpeg: options.ffmpegPath || provider.ffmpeg || 'ffmpeg',
-    ffprobe: options.ffprobePath || provider.ffprobe || 'ffprobe',
-    pollMs: options.pollMs ?? 200,
-    timeoutOverrideMs: options.timeoutOverrideMs,
+    enableTemplate,
+    defaultEngine,
+    template,
+    signingKey: options.signingKey || null,
+    ffmpeg: options.ffmpegPath || template.ffmpeg,
+    ffprobe: options.ffprobePath || template.ffprobe,
+    pollMs: options.pollMs ?? 500,
+    webhookLookup: options.webhookLookup || defaultLookup,
+    webhookTransport: options.webhookTransport || null,
+    webhookPorts: options.webhookPorts || new Set([443]),
     log,
     sweepExpired() {
       for (const artifact of store.expiredArtifacts(now())) {
         try {
           fs.rmSync(safeJoin(options.dataDir, artifact.relativePath), { force: true });
         } catch {
-          // Continue so the database does not keep serving the row.
+          // The row stays so a later download can answer 410 instead of 404.
         }
-        store.deleteArtifact(artifact.id);
       }
     },
     sweepOrphans() {
@@ -127,15 +144,14 @@ export async function createApp(options) {
       });
     },
   };
-  const recovered = store.recoverOrphanedRunning();
+  const recovered = store.recoverRunning();
   ctx.sweepExpired();
   ctx.sweepOrphans();
-  if (recovered.requeued || recovered.failed) {
-    log('info', { code: 'recovered', requeued: recovered.requeued, failed: recovered.failed });
+  if (recovered.requeued || recovered.failed || recovered.cancelled) {
+    log('info', { code: 'recovered', ...recovered });
   }
-
   const worker = createWorker(ctx);
-  if (options.worker !== false) worker.start();
+  if (options.autostart !== false) worker.start();
   const server = http.createServer(createHandler(ctx));
   const host = options.host || '127.0.0.1';
   const port = options.port ?? 0;
@@ -155,10 +171,9 @@ export async function createApp(options) {
   return {
     url: `http://127.0.0.1:${address.port}`,
     port: address.port,
-    provider,
     limits,
     store,
-    recovered,
+    templateReady: template.ready,
     async tick() {
       return worker.tick();
     },

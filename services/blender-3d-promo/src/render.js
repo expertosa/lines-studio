@@ -19,7 +19,7 @@ function abortError() {
   return Object.assign(new Error('cancelled'), { code: 'cancelled', retry: false });
 }
 
-function run(bin, args, { workDir, signal, onLine }) {
+function run(bin, args, { workDir, signal, onLine, doneMarker = null }) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(abortError());
@@ -28,6 +28,7 @@ function run(bin, args, { workDir, signal, onLine }) {
     const child = spawn(bin, args, { env: childEnv(workDir), stdio: ['ignore', 'pipe', 'pipe'] });
     const tail = [];
     let buffer = '';
+    let done = false;
     const keep = (chunk) => {
       tail.push(...String(chunk).split('\n').filter(Boolean));
       tail.splice(0, Math.max(0, tail.length - 20));
@@ -36,7 +37,10 @@ function run(bin, args, { workDir, signal, onLine }) {
       buffer += chunk;
       const parts = buffer.split('\n');
       buffer = parts.pop();
-      for (const line of parts) onLine?.(line);
+      for (const line of parts) {
+        if (doneMarker && line.startsWith(doneMarker)) done = true;
+        onLine?.(line);
+      }
       keep(chunk);
     });
     child.stderr.on('data', keep);
@@ -49,14 +53,22 @@ function run(bin, args, { workDir, signal, onLine }) {
         retry: false,
       }));
     });
-    child.on('close', (code) => {
+    child.on('close', (code, killedBy) => {
       signal?.removeEventListener('abort', onAbort);
       if (signal?.aborted) {
         reject(abortError());
         return;
       }
+      if (buffer && doneMarker && buffer.startsWith(doneMarker)) done = true;
+      // The bpy module (and some Blender builds) can crash during teardown after the
+      // work is finished; the caller still verifies every frame exists.
+      if (code !== 0 && done) {
+        resolve();
+        return;
+      }
       if (code !== 0) {
-        reject(Object.assign(new Error(`${path.basename(bin)} exited ${code}: ${tail.slice(-3).join(' | ')}`.slice(0, 400)), {
+        const status = code === null ? `signal ${killedBy}` : code;
+        reject(Object.assign(new Error(`${path.basename(bin)} exited ${status}: ${tail.slice(-3).join(' | ')}`.slice(0, 400)), {
           code: 'render_failed',
           retry: true,
         }));
@@ -134,6 +146,7 @@ export async function renderPromo(spec, {
   await run(bin, args, {
     workDir,
     signal,
+    doneMarker: 'PROMO3D_DONE',
     onLine(line) {
       const match = /^PROMO3D_FRAME (\d+) (\d+)/.exec(line);
       if (match) onProgress?.({ stage: 'frames', frame: Number(match[1]), total: Number(match[2]) });
@@ -164,6 +177,6 @@ export async function renderStill(spec, { workDir, frame, blender, python, signa
   const specPath = path.join(workDir, 'spec.json');
   fs.writeFileSync(specPath, JSON.stringify(spec, null, 2));
   const [bin, args] = sceneCommand({ blender, python }, ['--spec', specPath, '--frames', workDir, '--still', String(frame)]);
-  await run(bin, args, { workDir, signal });
+  await run(bin, args, { workDir, signal, doneMarker: 'PROMO3D_DONE' });
   return path.join(workDir, `still_${String(frame).padStart(4, '0')}.png`);
 }

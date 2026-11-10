@@ -57,6 +57,20 @@ test('renderPromo produces an MP4 and a thumbnail', { skip: !hasFfmpeg && 'ffmpe
   }
 });
 
+test('a crash after every frame is written still produces the video', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promo3d-'));
+  try {
+    const result = await renderPromo(fromBrief({ title: 'Lines', seconds: 5, fps: 24 }), {
+      workDir: path.join(dir, 'work'),
+      outFile: path.join(dir, 'promo.mp4'),
+      blender: path.join(here, 'fake-blender-crash.js'),
+    });
+    assert.ok(fs.statSync(result.video).size > 1000);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('a Blender failure is reported as a retryable render error', { skip: !fs.existsSync('/bin/false') && 'no /bin/false' }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promo3d-'));
   try {

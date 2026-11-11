@@ -2,6 +2,7 @@ import Link from 'next/link';
 import LangSwitch from './LangSwitch';
 import { t } from '../lib/dict';
 import { site } from '../lib/site';
+import { socialCopy } from '../lib/social';
 
 export default function Header({ lang, path = '' }) {
   const d = t(lang);
@@ -23,6 +24,7 @@ export default function Header({ lang, path = '' }) {
           <Link href={`/${lang}/work/`}>{d.nav.work}</Link>
           <Link href={`/${lang}/#packages`}>{d.nav.packages}</Link>
           <Link href={`/${lang}/#video`}>{d.nav.video}</Link>
+          <Link href={`/${lang}/social/`}>{(socialCopy[lang] || socialCopy.ar).nav}</Link>
           <Link href={`/${lang}/#how`}>{d.nav.how}</Link>
           <Link href={`/${lang}/mcp/`}>{d.nav.mcp}</Link>
           <LangSwitch lang={lang} path={path} label={d.nav.lang} />

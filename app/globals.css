@@ -244,3 +244,29 @@ img { max-width: 100%; }
 .addon input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--ink); flex: none; }
 .addon span { display: flex; flex-direction: column; gap: 4px; }
 .addon small { font-size: 14px; color: var(--muted); }
+
+/* Social media management */
+.social-hero { display: flex; flex-direction: column; gap: 24px; align-items: flex-start; }
+.social-hero h1 { font-size: clamp(42px, 7vw, 76px); line-height: 1.2; font-weight: 900; max-width: 900px; }
+.social-platforms { color: var(--lilac); font-weight: 600; font-size: 16px; }
+.steps-light { margin-top: 28px; }
+.steps-light .step { background: #fff; border: 2px solid var(--line); }
+.steps-light .step p { color: var(--muted); }
+.social-plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+.social-plan { background: #1e1e1e; border-radius: 28px; padding: 28px; display: flex; flex-direction: column; gap: 16px; }
+.social-plan-featured { background: #fff; color: var(--ink); outline: 4px solid var(--lime); }
+.social-plan .tag { align-self: flex-start; padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+.social-plan h3 { font-size: 28px; font-weight: 800; }
+.social-plan .price { font-family: var(--display); font-size: 38px; font-weight: 900; }
+.social-plan .price span { font-size: 15px; font-weight: 700; }
+.social-plan ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; line-height: 1.6; }
+.social-plan li::before { content: '✦'; color: var(--lime); margin-inline-end: 8px; }
+.social-plan-featured li::before { color: #7b61e8; }
+.social-plan .btn { margin-top: auto; }
+.faq { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; max-width: 860px; }
+.faq details { border: 2px solid var(--line); border-radius: 20px; padding: 18px 22px; background: #fff; }
+.faq summary { font-weight: 700; font-size: 18px; cursor: pointer; }
+.faq p { margin-top: 10px; line-height: 1.8; color: var(--muted); }
+.social-strip { border: 2px solid var(--ink); border-radius: 32px; padding: 32px 36px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 20px; }
+.social-strip h2 { font-size: clamp(26px, 3.5vw, 36px); font-weight: 900; }
+.social-strip p { color: var(--muted); font-size: 17px; margin-top: 6px; }

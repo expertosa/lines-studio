@@ -1,0 +1,17 @@
+{
+  "name": "@lines-studio/social-content",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Arabic (Saudi) social media content calendars for Lines Studio account management",
+  "scripts": {
+    "test": "node --test",
+    "lint": "node --check src/brief.js && node --check src/calendar.js && node --check src/prompt.js && node --check src/generate.js && node --check src/output.js && node --check src/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0"
+  }
+}

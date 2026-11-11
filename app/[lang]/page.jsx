@@ -5,6 +5,7 @@ import { t } from '../../lib/dict';
 import { site } from '../../lib/site';
 import { pageMeta } from '../../lib/seo';
 import { featuredWorks } from '../../lib/work';
+import { socialCopy } from '../../lib/social';
 
 export async function generateMetadata({ params }) {
   const { lang } = await params;
@@ -16,6 +17,7 @@ export default async function Home({ params }) {
   const { lang } = await params;
   const d = t(lang);
   const wa = `https://wa.me/${site.whatsapp}`;
+  const sc = socialCopy[lang] || socialCopy.ar;
   const items = [...d.marquee, ...d.marquee, ...d.marquee, ...d.marquee];
 
   return (
@@ -153,7 +155,17 @@ export default async function Home({ params }) {
         </div>
       </section>
 
-      <section className="wrap" style={{ paddingBottom: 96 }}>
+      <section className="wrap" style={{ paddingTop: 72 }}>
+        <div className="social-strip">
+          <div>
+            <h2>{sc.homeT}</h2>
+            <p>{sc.homeS}</p>
+          </div>
+          <Link className="btn btn-ink" href={`/${lang}/social/`}>{sc.homeC}</Link>
+        </div>
+      </section>
+
+      <section className="wrap" style={{ paddingBottom: 96, paddingTop: 24 }}>
         <div className="trial">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: '1 1 420px' }}>
             <h2>{d.trial.title}</h2>

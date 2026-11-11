@@ -37,3 +37,10 @@ test('tagline shows in the outro only when there are no captions', () => {
   const bare = buildOverlay(fromBrief({ title: 'Lines', tagline: 'We build apps.', captions: [] }));
   assert.match(bare, /,Tag,.*We build apps\./);
 });
+
+test('the 2D title and bar are dropped when Blender renders the 3D title', () => {
+  const ass = buildOverlay(fromBrief({ title: 'اكسبرتو', cta: 'اطلب' }, { font3d: '/f.ttf' }));
+  assert.doesNotMatch(ass, /,Title,,/);
+  assert.doesNotMatch(ass, /,Bar,,/);
+  assert.match(ass, /,Cta,,/);
+});

@@ -5,6 +5,7 @@ import { createClient, sanitizeMessage } from './api.js';
 import { assertOnDataVolume, isInside } from './paths.js';
 import { renderPromo } from './render.js';
 import { fromJob } from './spec.js';
+import { resolve3dFont } from './fonts.js';
 
 /**
  * Render one claimed `promo3d` job and report it back to the Lines video API.
@@ -24,7 +25,7 @@ export async function renderClaimedJob(job, deps) {
   const workDir = path.join(deps.tmpDir, job.id);
   const outFile = path.join(workDir, 'promo.mp4');
   try {
-    const spec = fromJob(job, { assetsDir: deps.assetsDir, quality: deps.quality || 'final' });
+    const spec = fromJob(job, { assetsDir: deps.assetsDir, quality: deps.quality || 'final', font3d: deps.font3d || null });
     const render = deps.render || renderPromo;
     const result = await render(spec, {
       workDir,
@@ -122,6 +123,7 @@ export async function main({ fetchImpl = globalThis.fetch, sleep = (ms) => new P
       quality: process.env.PROMO_QUALITY === 'draft' ? 'draft' : 'final',
       fonts: { ar: process.env.PROMO_FONT_AR, en: process.env.PROMO_FONT_EN },
       fontsDir: process.env.PROMO_FONTS_DIR || null,
+      font3d: resolve3dFont(process.env.PROMO_FONT_3D),
       heartbeatMs: Number(process.env.LINES_HEARTBEAT_MS || 30_000),
       log,
     });

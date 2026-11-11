@@ -88,3 +88,10 @@ test('script scenes from the API keep their order and requested lengths', () => 
   assert.equal(b.text, 'b');
   assert.ok(a.end - a.start > (b.end - b.start) * 2);
 });
+
+test('the 3D title is on only when a font is available', () => {
+  assert.equal(fromBrief({ title: 'A' }).title3d, null);
+  assert.deepEqual(fromBrief({ title: 'A' }, { font3d: '/f.ttf' }).title3d, { font: '/f.ttf' });
+  assert.equal(fromBrief({ title: 'A', title3d: false }, { font3d: '/f.ttf' }).title3d, null);
+  assert.equal(fromBrief({ title: 'A', explode: false }).explode, false);
+});

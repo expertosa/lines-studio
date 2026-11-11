@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fromBrief } from './spec.js';
+import { resolve3dFont } from './fonts.js';
 import { renderPromo, renderStill } from './render.js';
 
 const USAGE = `Lines Studio — 3D promo videos with Blender
@@ -25,7 +26,8 @@ Options:
   --fonts-dir <dir>      Extra font directory for the text layer
   --spec-only            Print the render spec and exit
 
-Environment: BLENDER_BIN, BPY_PYTHON, FFMPEG_BIN, PROMO_FONT_AR, PROMO_FONT_EN (font family names)
+Environment: BLENDER_BIN, BPY_PYTHON, FFMPEG_BIN, PROMO_FONT_AR, PROMO_FONT_EN (font family names),
+             PROMO_FONT_3D (font file for the extruded title; needs Arabic presentation forms)
 `;
 
 function fail(message) {
@@ -71,7 +73,9 @@ if (values.engine) brief.renderEngine = values.engine;
 if (values.format) brief.format = values.format;
 if (values.seconds) brief.seconds = Number(values.seconds);
 
-const spec = fromBrief(brief, { resolveImage: (image) => path.resolve(briefDir, image) });
+const font3d = resolve3dFont(process.env.PROMO_FONT_3D);
+const spec = fromBrief(brief, { resolveImage: (image) => path.resolve(briefDir, image), font3d });
+if (brief.title3d !== false && !font3d) process.stderr.write('No 3D title font found (set PROMO_FONT_3D); using the 2D title.\n');
 if (spec.hero.image && !fs.existsSync(spec.hero.image)) fail(`Hero image not found: ${spec.hero.image}`);
 if (values['spec-only']) {
   process.stdout.write(`${JSON.stringify(spec, null, 2)}\n`);

@@ -58,11 +58,14 @@ export function buildOverlay(spec, { fonts = {} } = {}) {
   const t0 = outro.start + 0.2;
   const t1 = spec.seconds;
   const titleY = h * 0.76;
-  dialogue(t0, t1, 'Title', `{\\an5${rise(w / 2, titleY)}\\fad(400,0)}${assEscape(spec.title)}`);
-  const barW = Math.round(unit * 0.16);
-  const barH = Math.max(3, Math.round(unit * 0.006));
-  dialogue(t0 + 0.3, t1, 'Bar',
-    `{\\an5\\pos(${Math.round(w / 2)},${Math.round(titleY + unit * 0.065)})\\fscx0\\t(0,500,\\fscx100)\\bord0\\shad0\\p1}m 0 0 l ${barW} 0 ${barW} ${barH} 0 ${barH}{\\p0}`);
+  if (!spec.title3d) {
+    // The 3D title replaces this one when Blender renders it.
+    dialogue(t0, t1, 'Title', `{\\an5${rise(w / 2, titleY)}\\fad(400,0)}${assEscape(spec.title)}`);
+    const barW = Math.round(unit * 0.16);
+    const barH = Math.max(3, Math.round(unit * 0.006));
+    dialogue(t0 + 0.3, t1, 'Bar',
+      `{\\an5\\pos(${Math.round(w / 2)},${Math.round(titleY + unit * 0.065)})\\fscx0\\t(0,500,\\fscx100)\\bord0\\shad0\\p1}m 0 0 l ${barW} 0 ${barW} ${barH} 0 ${barH}{\\p0}`);
+  }
   if (spec.tagline && !spec.scenes.some((scene) => scene.text)) {
     dialogue(t0 + 0.45, t1, 'Tag', `{\\an5${rise(w / 2, h * 0.85)}\\fad(400,0)}${assEscape(spec.tagline)}`);
   }

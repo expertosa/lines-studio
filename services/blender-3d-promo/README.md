@@ -51,7 +51,7 @@ Without the Blender app you can use the `bpy` wheel (Python 3.11): `pip install 
 | `--save-blend` | keep the generated scene as `out/<brief>.blend` |
 | `--spec-only` | print the resolved spec |
 
-Env: `BLENDER_BIN`, `BPY_PYTHON`, `FFMPEG_BIN`, `PROMO_FONT_AR`, `PROMO_FONT_EN` (font family names for the text layer).
+Env: `BLENDER_BIN`, `BPY_PYTHON`, `FFMPEG_BIN`, `PROMO_FONT_AR`, `PROMO_FONT_EN` (font family names for the text layer), `PROMO_FONT_3D` (font file for the 3D title).
 
 ## ملف البريف | Brief
 
@@ -85,9 +85,15 @@ Env: `BLENDER_BIN`, `BPY_PYTHON`, `FFMPEG_BIN`, `PROMO_FONT_AR`, `PROMO_FONT_EN`
 | `brand`, `cta`, `tagline` | outro text |
 | `language` | `ar` / `en`; detected from the text if missing |
 | `fps` | 24, 25, 30 (default), 60 |
+| `title3d` | `false` to use the flat title instead of the extruded 3D one |
+| `explode` | `false` to skip the exploded-UI moment |
 | `quality`, `renderEngine`, `seed` | see options; `seed` changes the line layout |
 
-Shots run in order: `reveal` (push in) → `orbit` → `close` → `detail` … → `outro` (pull back, room for the title). Hard cuts between shots, eased motion inside each one.
+Shots run in order: `reveal` (push in) → `orbit` → `close` → `detail` … → `outro`. Hard cuts between shots, eased motion inside each one.
+
+- **Exploded UI:** in the first close/detail scene the camera swings to a three-quarter view and three slices of the screenshot (top bar, headline, call to action) lift off the screen toward the camera, hold, and settle back.
+- **3D title:** in the outro the title is an extruded, bevelled, metallic text object that flips up into place. Arabic is shaped by `blender/arabic.py` (contextual forms, lam-alef, RTL order), so the font must include Arabic Presentation Forms-B. Set `PROMO_FONT_3D` to a font file; otherwise Arial Unicode / Arial Bold (macOS) or DejaVu Sans Bold (Linux) is used. With no suitable font the flat 2D title is used.
+- **Emblem lines:** the orbiting lines retract and parallel strokes sweep in behind the 3D title (right-to-left for Arabic).
 
 ## كيف ينبني المشهد | What the scene script does
 
@@ -95,12 +101,13 @@ Shots run in order: `reveal` (push in) → `orbit` → `close` → `detail` … 
 
 - dark reflective floor, podium with a glowing ring, world colour from the palette;
 - the hero model (bevelled phone, laptop with a hinged lid, or metallic orb with spinning rings) with the screenshot as an emissive screen;
-- 10–14 glowing bezier "lines" in the primary/accent colours that draw themselves on (`bevel_factor_end` keyframes) while the group slowly rotates — the خطوط motif;
+- 10–14 glowing bezier "lines" in the primary/accent colours that draw themselves on behind the hero (`bevel_factor_end` keyframes), framing it without crossing the screen — the خطوط motif;
+- exploded UI layers, the extruded 3D title and the emblem strokes described above;
 - floating dust particles, three-point area lighting tinted by the palette;
 - a camera with a Track-To target, keyframed per scene, with depth of field in `final`;
 - compositor glare for bloom where the Blender version supports it.
 
-Text is not rendered in Blender on purpose: Blender text objects do not join Arabic letters. `src/overlay.js` writes an ASS file (captions with fade/rise, outro title with an animated accent bar, CTA pill, brand mark) and ffmpeg/libass renders it with proper shaping and RTL.
+Blender text objects do not join Arabic letters, so the only text Blender renders is the 3D title, pre-shaped by `blender/arabic.py`. Everything else comes from `src/overlay.js`, which writes an ASS file (captions with fade/rise, CTA pill, brand mark, and the flat title when there is no 3D one). ffmpeg/libass renders it with proper shaping and RTL.
 
 ## عبر واجهة الفيديو | Through the Lines video API
 
@@ -153,6 +160,7 @@ Put the printed token in `secrets/blender-worker-token`, copy `launchd/com.lines
 | `PROMO_ASSETS_DIR` | default `<root>/blender/assets` |
 | `PROMO_MUSIC` | optional music file inside the root |
 | `PROMO_FONT_AR`, `PROMO_FONT_EN`, `PROMO_FONTS_DIR` | text layer fonts |
+| `PROMO_FONT_3D` | font file for the 3D title (needs Arabic presentation forms) |
 | `LINES_WORKER_POLL_MS`, `LINES_HEARTBEAT_MS` | defaults 5000 / 30000 |
 
 The API keeps one render at a time (`LINES_MAX_CONCURRENCY=1`), so the Blender and MoneyPrinter workers share the Mac without competing.

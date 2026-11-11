@@ -35,6 +35,9 @@ import sys
 import bpy  # must come first: the bpy wheel provides bmesh
 import bmesh  # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import arabic  # noqa: E402  (blender/arabic.py, stdlib only)
+
 # ---------------------------------------------------------------- helpers
 
 
@@ -285,10 +288,11 @@ def build_phone(palette, image_path, base_z, focus=0.5):
     )
     bevel(body, 0.075, 8)
     body.parent = pivot
-    screen = quad_with_uv("PhoneScreen", 1.42, 3.06, screen_material(palette, image_path, 1.42 / 3.06, focus))
+    material = screen_material(palette, image_path, 1.42 / 3.06, focus)
+    screen = quad_with_uv("PhoneScreen", 1.42, 3.06, material)
     screen.location = (0.0, -0.0815, 0.0)
     screen.parent = pivot
-    return pivot, 1.75
+    return pivot, {"parent": pivot, "center": (0.0, -0.0815, 0.0), "size": (1.42, 3.06), "material": material}
 
 
 def build_laptop(palette, image_path, base_z, frames, focus=0.5):
@@ -309,14 +313,15 @@ def build_laptop(palette, image_path, base_z, frames, focus=0.5):
     bevel(lid, 0.03, 5)
     lid.location = (0.0, 0.0, 1.025)
     lid.parent = hinge
-    screen = quad_with_uv("LaptopScreen", 2.95, 1.84, screen_material(palette, image_path, 2.95 / 1.84, focus))
+    material = screen_material(palette, image_path, 2.95 / 1.84, focus)
+    screen = quad_with_uv("LaptopScreen", 2.95, 1.84, material)
     screen.location = (0.0, -0.037, 1.025)
     screen.parent = hinge
     # Lid opens during the first scene: closed (lying flat) -> ~105 degrees open.
     open_end = max(2, int(frames * 0.18))
     key(hinge, "rotation_euler", 1, (math.radians(-88), 0.0, 0.0))
     key(hinge, "rotation_euler", open_end, (math.radians(14), 0.0, 0.0))
-    return pivot, 1.0
+    return pivot, {"parent": hinge, "center": (0.0, -0.037, 1.025), "size": (2.95, 1.84), "material": material}
 
 
 def build_orb(palette, base_z, frames):
@@ -337,7 +342,7 @@ def build_orb(palette, base_z, frames):
         ring.parent = pivot
         key(ring, "rotation_euler", 1, (math.radians(tilt), 0.0, 0.0))
         key(ring, "rotation_euler", frames, (math.radians(tilt), 0.0, math.radians(140 if index else -140)))
-    return pivot, 1.55
+    return pivot, None
 
 
 def animate_hero(pivot, frames, fps, hero_type):
@@ -350,8 +355,12 @@ def animate_hero(pivot, frames, fps, hero_type):
         key(pivot, "location", frame, (0.0, 0.0, z0 + (0.06 if index % 2 else -0.04)))
 
 
-def build_lines(palette, rng, frames, fps, count):
-    """The brand motif: glowing lines that draw themselves around the hero."""
+def build_lines(palette, rng, frames, fps, count, outro_frame):
+    """The brand motif: glowing lines that draw themselves around the hero.
+
+    Arcs stay behind the hero (the camera looks from -Y) so they frame the
+    screen instead of crossing it, and retract when the outro starts.
+    """
     group = link_object(bpy.data.objects.new("Lines", None))
     materials = [
         emissive("LinePrimary", color(palette["primary"]), 4.5),
@@ -360,8 +369,8 @@ def build_lines(palette, rng, frames, fps, count):
     draw_window = max(2, int(frames * 0.45))
     for index in range(count):
         radius = rng.uniform(2.3, 4.4)
-        start_angle = rng.uniform(0, 2 * math.pi)
-        sweep = rng.uniform(0.9, 1.7) * math.pi
+        start_angle = rng.uniform(-0.12, 0.3) * math.pi
+        sweep = rng.uniform(0.55, 0.95) * math.pi
         z0 = rng.uniform(0.35, 3.6)
         dz = rng.uniform(-1.2, 1.4)
         wobble = rng.uniform(0.1, 0.35)
@@ -379,9 +388,111 @@ def build_lines(palette, rng, frames, fps, count):
         key(data, "bevel_factor_end", 1, 0.0)
         key(data, "bevel_factor_end", begin, 0.0)
         key(data, "bevel_factor_end", min(frames, begin + length), 1.0)
-    key(group, "rotation_euler", 1, (0.0, 0.0, 0.0))
-    key(group, "rotation_euler", frames, (0.0, 0.0, math.radians(38)))
+        retract = outro_frame + int(rng.uniform(0, fps * 0.3))
+        key(data, "bevel_factor_start", 1, 0.0)
+        key(data, "bevel_factor_start", retract, 0.0)
+        key(data, "bevel_factor_start", min(frames, retract + int(fps * 0.6)), 1.0)
+    key(group, "rotation_euler", 1, (0.0, 0.0, math.radians(-10)))
+    key(group, "rotation_euler", frames, (0.0, 0.0, math.radians(12)))
     return group
+
+
+def build_exploded_ui(screen, frames, fps, window, rng):
+    """Slices of the screenshot lift off the screen toward the camera, then settle back.
+
+    Each slice reuses the screen material with a sub-range of the screen UVs, so
+    it shows exactly the pixels it covers and is invisible until it moves.
+    """
+    if screen is None or window is None:
+        return
+    width, height = screen["size"]
+    cx, cy, cz = screen["center"]
+    bands = [(0.80, 0.97), (0.45, 0.78), (0.18, 0.43)]  # top bar, headline, call to action (v from bottom)
+    start, end = window
+    for index, (v0, v1) in enumerate(bands):
+        mesh = bpy.data.meshes.new(f"UiLayer{index}")
+        w = width / 2.0
+        z0, z1 = (v0 - 0.5) * height, (v1 - 0.5) * height
+        mesh.from_pydata([(-w, 0, z0), (w, 0, z0), (w, 0, z1), (-w, 0, z1)], [], [(0, 1, 2, 3)])
+        uv = mesh.uv_layers.new(name="UVMap")
+        for loop, coord in zip(uv.data, [(0, v0), (1, v0), (1, v1), (0, v1)]):
+            loop.uv = coord
+        mesh.materials.append(screen["material"])
+        layer = link_object(bpy.data.objects.new(f"UiLayer{index}", mesh))
+        layer.parent = screen["parent"]
+        rest = (cx, cy - 0.003 - index * 0.001, cz)
+        lift = 0.6 + index * 0.45
+        out = (cx + rng.uniform(-0.12, 0.12), cy - lift, cz + (index - 1) * 0.06)
+        tilt = (math.radians(rng.uniform(-4, 4)), 0.0, math.radians(rng.uniform(-6, 6)))
+        delay = int(index * fps * 0.12)
+        up = min(frames, start + delay)
+        held = min(frames, up + int(fps * 0.45))
+        back = max(held + 1, min(frames, end - int(fps * 0.5) + delay // 2))
+        home = min(frames, back + int(fps * 0.4))
+        for frame, loc, rot, scale in ((1, rest, (0, 0, 0), 1.0), (up, rest, (0, 0, 0), 1.0),
+                                       (held, out, tilt, 1.06), (back, out, tilt, 1.06),
+                                       (home, rest, (0, 0, 0), 1.0)):
+            key(layer, "location", frame, loc)
+            key(layer, "rotation_euler", frame, rot)
+            key(layer, "scale", frame, (scale, scale, scale))
+
+
+def build_title3d(spec, palette, frames, fps, outro_frame, title_y, title_z, width_target):
+    """Extruded, bevelled title that flips up in the outro. Arabic is shaped by arabic.py."""
+    info = spec.get("title3d") or {}
+    font_path = info.get("font")
+    if not font_path or not os.path.isfile(font_path):
+        return None
+    data = bpy.data.curves.new("Title3D", "FONT")
+    data.body = arabic.visual(spec["title"])
+    data.font = bpy.data.fonts.load(font_path)
+    data.align_x = "CENTER"
+    data.align_y = "CENTER"
+    data.size = 1.0
+    data.extrude = 0.09
+    data.bevel_depth = 0.018
+    data.bevel_resolution = 3
+    data.materials.append(principled("Title3D", color(palette["primary"]), roughness=0.22, metallic=0.85,
+                                     emission=color(palette["primary"]), strength=0.35))
+    title = link_object(bpy.data.objects.new("Title3D", data))
+    bpy.context.view_layer.update()
+    measured = max(0.01, title.dimensions.x)
+    scale = width_target / measured
+    final_loc = (0.0, title_y, title_z)
+    begin = min(frames, outro_frame + int(fps * 0.15))
+    land = min(frames, begin + int(fps * 0.55))
+    settle = min(frames, land + int(fps * 0.2))
+    key(title, "hide_render", 1, True)
+    key(title, "hide_render", max(1, begin - 1), True)
+    key(title, "hide_render", begin, False)
+    key(title, "location", begin, (0.0, title_y, title_z - 0.9))
+    key(title, "rotation_euler", begin, (math.radians(150), 0.0, 0.0))
+    key(title, "scale", begin, (scale * 0.7,) * 3)
+    key(title, "location", land, (0.0, title_y, title_z + 0.06))
+    key(title, "rotation_euler", land, (math.radians(84), 0.0, 0.0))
+    key(title, "scale", land, (scale * 1.04,) * 3)
+    key(title, "location", settle, final_loc)
+    key(title, "rotation_euler", settle, (math.radians(90), 0.0, 0.0))
+    key(title, "scale", settle, (scale,) * 3)
+    key(title, "rotation_euler", frames, (math.radians(90), 0.0, math.radians(-3)))
+    return title, measured * scale, data.size * scale
+
+
+def build_emblem_lines(palette, frames, fps, outro_frame, title_y, title_z, span, text_h, rtl):
+    """Parallel strokes that sweep in behind the title: the lines become the sign-off."""
+    mats = [emissive("EmblemPrimary", color(palette["primary"]), 5.0),
+            emissive("EmblemAccent", color(palette["accent"]), 6.0)]
+    rows = [(-0.62, 1.0, 0.02), (-0.78, 0.7, 0.014), (0.66, 0.55, 0.012), (-0.92, 0.42, 0.01)]
+    for index, (dz, length, depth) in enumerate(rows):
+        half = span * 0.5
+        x0, x1 = (half, half - span * length) if rtl else (-half, -half + span * length)
+        z = title_z + dz * text_h
+        line = curve_object(f"Emblem{index}", [(x0, title_y + 0.25, z), (x1, title_y + 0.25, z)], depth,
+                            mats[index % 2], kind="POLY")
+        begin = min(frames, outro_frame + int(fps * (0.35 + index * 0.12)))
+        key(line.data, "bevel_factor_end", 1, 0.0)
+        key(line.data, "bevel_factor_end", begin, 0.0)
+        key(line.data, "bevel_factor_end", min(frames, begin + int(fps * 0.5)), 1.0)
 
 
 def build_particles(palette, rng, frames, count):
@@ -422,7 +533,12 @@ SHOTS = {
     "close": ((26, 6, 0.62, 0.2), (6, 3, 0.55, 0.25)),
     "detail": ((-62, 32, 0.85, -0.1), (-30, 22, 0.72, 0.0)),
     "outro": ((-10, 16, 1.3, -0.75), (0, 11, 1.18, -0.75)),
+    # three-quarter view so the lifted UI layers read as depth, not as a glitch
+    "explode": ((-58, 16, 0.95, 0.1), (-36, 10, 0.86, 0.1)),
 }
+
+
+OUTRO_DIST = (1.3, 1.15)  # camera distance multipliers at the start/end of the outro
 
 
 def frame_distance(width, height, hero_type):
@@ -437,7 +553,7 @@ def frame_distance(width, height, hero_type):
     return base
 
 
-def build_camera(scene, spec, target_z, hero_type):
+def build_camera(scene, spec, target_z, hero_type, outro_target=None, explode_scene=None):
     width, height, fps = spec["width"], spec["height"], spec["fps"]
     data = bpy.data.cameras.new("Camera")
     data.lens = 50
@@ -466,10 +582,23 @@ def build_camera(scene, spec, target_z, hero_type):
         key(cam, "location", frame, location)
         key(target, "location", frame, (0.0, 0.0, target_z + dz))
 
+    def place_outro(frame, azimuth, elevation, dist):
+        ty, tz = outro_target
+        az, el = math.radians(azimuth), math.radians(elevation)
+        location = (math.sin(az) * dist * math.cos(el), ty - math.cos(az) * dist * math.cos(el),
+                    tz + dist * math.sin(el))
+        key(cam, "location", frame, location)
+        key(target, "location", frame, (0.0, ty, tz))
+
     for scene_spec in spec["scenes"]:
         first = 1 + int(round(scene_spec["start"] * fps))
         last = max(first, min(frames, int(round(scene_spec["end"] * fps))))
-        start_pose, end_pose = SHOTS.get(scene_spec.get("shot"), SHOTS["orbit"])
+        if scene_spec.get("shot") == "outro" and outro_target is not None:
+            place_outro(first, -14, 14, distance * OUTRO_DIST[0])
+            place_outro(last, -2, 7, distance * OUTRO_DIST[1])
+            continue
+        shot = "explode" if scene_spec is explode_scene else scene_spec.get("shot")
+        start_pose, end_pose = SHOTS.get(shot, SHOTS["orbit"])
         place(first, start_pose)
         place(last, end_pose)
     return cam
@@ -562,6 +691,22 @@ def report_progress(total):
 # ---------------------------------------------------------------- main
 
 
+def explode_scene(spec):
+    """The first close/detail scene (else the orbit) gets the exploded-UI moment."""
+    scenes = spec["scenes"][:-1]
+    chosen = next((s for s in scenes if s.get("shot") in ("close", "detail")), None)
+    chosen = chosen or next((s for s in scenes if s.get("shot") == "orbit"), None)
+    if chosen is None or chosen["end"] - chosen["start"] < 1.5:
+        return None
+    return chosen
+
+
+def explode_window(chosen, fps, frames):
+    if chosen is None:
+        return None
+    return (1 + int(round((chosen["start"] + 0.3) * fps)), min(frames, int(round(chosen["end"] * fps))))
+
+
 def build(spec, frames_dir):
     scene = reset_scene()
     palette = spec["palette"]
@@ -573,20 +718,42 @@ def build(spec, frames_dir):
 
     build_world(scene, palette)
     base_z = build_stage(palette, hero_type)
+    focus = float(hero.get("focus", 0.5))
     if hero_type == "laptop":
-        pivot, _ = build_laptop(palette, hero.get("image"), base_z, frames, float(hero.get("focus", 0.5)))
+        pivot, screen = build_laptop(palette, hero.get("image"), base_z, frames, focus)
         target_z = base_z + 1.0
     elif hero_type == "orb":
-        pivot, _ = build_orb(palette, base_z, frames)
+        pivot, screen = build_orb(palette, base_z, frames)
         target_z = pivot.location.z
     else:
-        pivot, _ = build_phone(palette, hero.get("image"), base_z, float(hero.get("focus", 0.5)))
+        pivot, screen = build_phone(palette, hero.get("image"), base_z, focus)
         target_z = pivot.location.z
     animate_hero(pivot, frames, fps, hero_type)
-    build_lines(palette, rng, frames, fps, 14 if spec.get("quality") == "final" else 10)
+
+    outro = spec["scenes"][-1]
+    outro_frame = 1 + int(round(outro["start"] * fps))
+    exploding = explode_scene(spec) if spec.get("explode", True) and hero.get("image") and screen else None
+    if exploding is not None:
+        build_exploded_ui(screen, frames, fps, explode_window(exploding, fps, frames), rng)
+    build_lines(palette, rng, frames, fps, 14 if spec.get("quality") == "final" else 10, outro_frame)
     build_particles(palette, rng, frames, 60 if spec.get("quality") == "final" else 30)
     build_lights(palette)
-    build_camera(scene, spec, target_z, hero_type)
+
+    outro_target = None
+    distance = frame_distance(spec["width"], spec["height"], hero_type)
+    title_y = -2.3 if hero_type == "laptop" else -1.9
+    title_z = base_z + 0.75
+    outro_target_y = title_y * 0.45
+    cam_to_title = distance * OUTRO_DIST[1] - (outro_target_y - title_y)
+    sensor_w = 36.0 if spec["width"] >= spec["height"] else 36.0 * spec["width"] / spec["height"]
+    visible_w = cam_to_title * sensor_w / 50.0
+    made = build_title3d(spec, palette, frames, fps, outro_frame, title_y, title_z, visible_w * 0.78)
+    if made:
+        _, span, text_h = made
+        build_emblem_lines(palette, frames, fps, outro_frame, title_y, title_z, span * 1.15, text_h,
+                           spec.get("language") == "ar")
+        outro_target = (outro_target_y, (title_z + target_z) / 2.0)
+    build_camera(scene, spec, target_z, hero_type, outro_target, exploding)
     engine = configure_render(scene, spec, frames_dir)
     return scene, engine, frames
 

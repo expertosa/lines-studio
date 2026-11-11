@@ -109,7 +109,7 @@ function detectLanguage(...texts) {
  *   palette, hero: "phone" | { type, image, focus 0..1 }, brand, cta, quality, renderEngine, fps, seed }
  * `baseDir` resolves a relative hero image path (CLI only).
  */
-export function fromBrief(brief, { resolveImage = (p) => p } = {}) {
+export function fromBrief(brief, { resolveImage = (p) => p, font3d = null } = {}) {
   if (!brief || typeof brief !== 'object') throw new Error('brief must be an object');
   const title = clean(brief.title, 140);
   if (!title) throw new Error('brief.title is required');
@@ -144,6 +144,9 @@ export function fromBrief(brief, { resolveImage = (p) => p } = {}) {
       focus: Number.isFinite(heroInput.focus) ? Math.min(1, Math.max(0, heroInput.focus)) : (language === 'ar' ? 0.85 : 0.5),
     },
     scenes: timeline(captions, seconds, requested),
+    // Extruded title in the outro (needs a font with Arabic presentation forms); null = 2D overlay title.
+    title3d: brief.title3d !== false && font3d ? { font: font3d } : null,
+    explode: brief.explode !== false,
     quality: QUALITIES.includes(brief.quality) ? brief.quality : 'draft',
     renderEngine: RENDER_ENGINES.includes(brief.renderEngine) ? brief.renderEngine : 'eevee',
     seed: Number.isInteger(brief.seed) ? brief.seed : seedFrom(title),
@@ -155,7 +158,7 @@ export function fromBrief(brief, { resolveImage = (p) => p } = {}) {
  * Optional job.metadata: palette ("#bg,#primary,#accent[,#text]"), hero, heroAsset
  * (a file name inside the worker's assets directory — never a URL), brand, cta.
  */
-export function fromJob(job, { assetsDir = null, quality = 'final' } = {}) {
+export function fromJob(job, { assetsDir = null, quality = 'final', font3d = null } = {}) {
   if (!job || job.engine !== 'blender') throw new Error('this worker only renders blender jobs');
   const meta = job.metadata || {};
   let image = null;
@@ -175,5 +178,5 @@ export function fromJob(job, { assetsDir = null, quality = 'final' } = {}) {
     brand: meta.brand,
     cta: meta.cta,
     quality,
-  });
+  }, { font3d });
 }

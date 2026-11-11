@@ -67,6 +67,8 @@ export function presentWorkerJob(job) {
     language: job.language,
     seconds: job.seconds,
     voice: job.voice,
+    // Render options for the worker (promo3d palette/hero, ugc presenter). Callers are told not to put secrets here.
+    metadata: job.metadata || {},
     engine: job.engine,
     width: job.width,
     height: job.height,

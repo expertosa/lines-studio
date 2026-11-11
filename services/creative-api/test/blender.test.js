@@ -49,6 +49,7 @@ test('promo3d jobs go only to a worker that renders blender', async () => {
     assert.equal(blender.json.job.style, 'promo3d');
     assert.equal(blender.json.job.width, 1920);
     assert.equal(blender.json.job.height, 1080);
+    assert.deepEqual(blender.json.job.metadata, { palette: '#0B1F33,#E8C872,#4FD1C5', hero: 'laptop' });
   } finally {
     await ctx.close();
   }

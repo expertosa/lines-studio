@@ -117,6 +117,7 @@ export async function createApp(options) {
     tmpDir,
     enableTemplate,
     enableBlender: Boolean(options.enableBlender),
+    enableUgc: Boolean(options.enableUgc),
     defaultEngine,
     template,
     signingKey: options.signingKey || null,

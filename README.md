@@ -49,6 +49,10 @@ BLENDER_BIN=/Applications/Blender.app/Contents/MacOS/Blender node src/cli.js exa
 
 ويشتغل أيضاً عبر واجهة الفيديو بـ `style: "promo3d"` مع عامل Blender على الماك ميني. التفاصيل في `services/blender-3d-promo/README.md`.
 
+## فيديوهات UGC
+
+`services/ugc-worker/`: فيديو بأسلوب شخص يصوّر نفسه ويتكلم عن المنتج. تطلبه التطبيقات من واجهة الفيديو بـ `style: "ugc"` مع نص جاهز ومقدّم (`metadata.presenter`). العامل يولّد الصوت من ElevenLabs، ويحرّك صورة المقدّم مع مطابقة الشفايف على fal.ai، ويكتب الترجمة. هذي خدمات مدفوعة. التفاصيل في `services/ugc-worker/README.md`.
+
 ## إضافة تصميم جديد للمعرض
 
 أضف عنصر في `designs` داخل `lib/designs.js` بنفس الشكل: `id` و`cat` والاسم والوصف بالعربي والإنجليزي، وألوان المعاينة.

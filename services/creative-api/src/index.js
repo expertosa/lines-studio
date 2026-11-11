@@ -30,6 +30,7 @@ function readBootstrap(env) {
 const defaultEngine = process.env.LINES_DEFAULT_ENGINE || 'moneyprinter';
 const enableTemplate = (process.env.LINES_ENABLE_TEMPLATE ?? '1') !== '0';
 const enableBlender = process.env.LINES_ENABLE_BLENDER === '1';
+const enableUgc = process.env.LINES_ENABLE_UGC === '1';
 const dataDir = process.env.LINES_DATA_DIR;
 if (!dataDir) fail('config', 'Set LINES_DATA_DIR to a persistent directory.');
 
@@ -71,6 +72,7 @@ try {
     defaultEngine,
     enableTemplate,
     enableBlender,
+    enableUgc,
     signingKey: process.env.LINES_SIGNING_KEY || null,
     host: process.env.LINES_HOST || '127.0.0.1',
     port: Number(process.env.LINES_PORT || 8080),

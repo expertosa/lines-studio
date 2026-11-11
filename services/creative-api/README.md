@@ -87,11 +87,13 @@ On `job.succeeded`, `job.failed`, and `job.cancelled`, if `callbackUrl` was set:
 
 ## Worker
 
-`POST /v1/worker/claim` returns `{ "job": null }` or `{ "job", "leaseExpiresAt" }`. The job carries the render spec (title, prompt, script, style, format, language, seconds, voice) and not the callback URL. Heartbeat returns `{ "cancelRequested", "leaseExpiresAt" }`. Artifacts are multipart fields `video` (MP4) and optional `thumbnail` (PNG or JPEG). `complete` requires the video. `fail` body is `{ "code", "message", "retry" }`.
+`POST /v1/worker/claim` returns `{ "job": null }` or `{ "job", "leaseExpiresAt" }`. The job carries the render spec (title, prompt, script, style, format, language, seconds, voice, metadata) and not the callback URL. Workers read render options from `metadata`, so callers must not put secrets there. Heartbeat returns `{ "cancelRequested", "leaseExpiresAt" }`. Artifacts are multipart fields `video` (MP4) and optional `thumbnail` (PNG or JPEG). `complete` requires the video. `fail` body is `{ "code", "message", "retry" }`.
 
 The in-process template worker only claims `engine: "template"`. MoneyPrinter jobs wait for the Mac. See `services/mac-video-worker/README.md`.
 
 `style: "promo3d"` (engine `blender`) is a procedural 3D promo rendered by Blender on the Mac. It is listed only when `LINES_ENABLE_BLENDER=1`, and only a worker key with `--engines blender` can claim it. Optional `metadata`: `hero` (`phone`, `laptop`, `orb`), `heroAsset` (a file name in the worker's assets folder), `palette` (`#bg,#primary,#accent[,#text]`), `brand`, `cta`. See `services/blender-3d-promo/README.md`.
+
+`style: "ugc"` (engine `ugc`) is a selfie-style testimonial: a fixed presenter speaks `script.text` (required) with lip sync. It is listed only when `LINES_ENABLE_UGC=1` and claimed by a worker key with `--engines ugc`. Format `9:16` only, `seconds` 15 or 30, `voice` is always `"presenter"`, `metadata.presenter` picks the presenter. The worker makes paid vendor calls (ElevenLabs, fal.ai); this API still makes none. See `services/ugc-worker/README.md`.
 
 ## Keys
 
@@ -99,6 +101,7 @@ The in-process template worker only claims `engine: "template"`. MoneyPrinter jo
 LINES_DATA_DIR=/data node src/keys-cli.js create-app --tenant experto-web
 LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-mini --engines moneyprinter
 LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-blender --engines blender
+LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id ugc-worker --engines ugc
 LINES_DATA_DIR=/data node src/keys-cli.js rotate-key --id experto-web
 LINES_DATA_DIR=/data node src/keys-cli.js rotate-webhook --tenant experto-web
 LINES_DATA_DIR=/data node src/keys-cli.js revoke --id experto-web
@@ -142,6 +145,7 @@ Set these on the Coolify app. Do not commit values.
 | `LINES_DEFAULT_ENGINE` | `moneyprinter` (production) or `template` (local demo). Stock styles follow this. |
 | `LINES_ENABLE_TEMPLATE` | `1` (default) keeps the ffmpeg title-card engine. `0` hides `style: "template"`. |
 | `LINES_ENABLE_BLENDER` | `1` lists `style: "promo3d"` (Blender worker on the Mac). Default off. |
+| `LINES_ENABLE_UGC` | `1` lists `style: "ugc"` (paid vendors via the UGC worker). Default off. |
 | `LINES_BOOTSTRAP_KEYS` | JSON array above. Secret values. Not logged. |
 | `LINES_BOOTSTRAP_KEYS_FILE` | Absolute path to that JSON. Prefer this over the inline variable. |
 | `LINES_SIGNING_KEY` | HMAC key for short-lived artifact URLs. |

@@ -1,0 +1,15 @@
+{
+  "name": "@lines-studio/ugc-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pull worker for UGC (selfie testimonial) videos: ElevenLabs voice + fal.ai OmniHuman lip sync.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/api.js && node --check src/captions.js && node --check src/eleven.js && node --check src/fal.js && node --check src/index.js && node --check src/paths.js && node --check src/presenters.js && node --check src/run.js"
+  }
+}

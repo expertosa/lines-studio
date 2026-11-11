@@ -37,6 +37,7 @@ export async function createTestApp(overrides = {}) {
     autostart: false,
     enableTemplate: true,
     enableBlender: overrides.enableBlender,
+    enableUgc: overrides.enableUgc,
     defaultEngine: 'moneyprinter',
     signingKey: 'test-signing-key',
     now: overrides.now,

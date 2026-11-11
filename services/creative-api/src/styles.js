@@ -20,6 +20,7 @@ const SHARED = Object.freeze({
  * Stock styles follow `defaultEngine` (moneyprinter in production, template for a local demo).
  * `template` is the built-in ffmpeg engine and stays local when it is enabled.
  * `blender` (style `promo3d`) is pulled by the Blender worker and is listed only when enabled.
+ * `ugc` is pulled by the UGC worker (paid vendor calls) and is listed only when enabled.
  * `external` is reserved for a future generative vendor and is not listed until configured.
  */
 const DEFINITIONS = Object.freeze([
@@ -49,6 +50,18 @@ const DEFINITIONS = Object.freeze([
     testOnly: true,
   }),
   Object.freeze({
+    id: 'ugc',
+    label: 'UGC',
+    engine: 'ugc',
+    description: 'Selfie-style testimonial: a presenter speaks your script with lip sync. Paid vendor calls on the UGC worker. Requires script.text.',
+    // The voice comes from the presenter (metadata.presenter), not from Edge TTS.
+    formats: Object.freeze(['9:16']),
+    seconds: Object.freeze([15, 30]),
+    voices: Object.freeze({ ar: Object.freeze(['presenter']), en: Object.freeze(['presenter']) }),
+    defaultVoice: Object.freeze({ ar: 'presenter', en: 'presenter' }),
+    requiresScript: true,
+  }),
+  Object.freeze({
     id: 'promo3d',
     label: 'Promo 3D',
     engine: 'blender',
@@ -57,14 +70,15 @@ const DEFINITIONS = Object.freeze([
 ]);
 
 function engineFor(style, defaultEngine) {
-  if (style.engine === 'template' || style.engine === 'blender') return style.engine;
+  if (style.engine === 'template' || style.engine === 'blender' || style.engine === 'ugc') return style.engine;
   return defaultEngine;
 }
 
-export function listStyles({ enableTemplate, enableBlender = false, defaultEngine }) {
+export function listStyles({ enableTemplate, enableBlender = false, enableUgc = false, defaultEngine }) {
   return DEFINITIONS.filter((style) => {
     if (style.engine === 'template') return enableTemplate;
     if (style.engine === 'blender') return enableBlender;
+    if (style.engine === 'ugc') return enableUgc;
     return true;
   }).map((style) => ({
     id: style.id,
@@ -72,11 +86,12 @@ export function listStyles({ enableTemplate, enableBlender = false, defaultEngin
     description: style.description,
     engine: engineFor(style, defaultEngine),
     testOnly: Boolean(style.testOnly),
-    formats: SHARED.formats,
-    seconds: SHARED.seconds,
+    formats: style.formats || SHARED.formats,
+    seconds: style.seconds || SHARED.seconds,
     languages: SHARED.languages,
-    voices: SHARED.voices,
-    defaultVoice: SHARED.defaultVoice,
+    voices: style.voices || SHARED.voices,
+    defaultVoice: style.defaultVoice || SHARED.defaultVoice,
+    requiresScript: Boolean(style.requiresScript),
   }));
 }
 

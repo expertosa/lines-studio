@@ -28,7 +28,7 @@ test('overlay places captions per scene and a branded outro', () => {
   assert.ok(events.some((line) => line.includes(',Brand,') && line.endsWith('خطوط ستوديو')));
   const outro = spec.scenes.at(-1);
   const title = events.find((line) => line.includes(',Title,'));
-  assert.ok(title.startsWith(`Dialogue: 0,${assTime(outro.start + 0.2)},`));
+  assert.ok(title.startsWith(`Dialogue: 1,${assTime(outro.start + 0.2)},`));
 });
 
 test('tagline shows in the outro only when there are no captions', () => {
@@ -43,4 +43,15 @@ test('the 2D title and bar are dropped when Blender renders the 3D title', () =>
   assert.doesNotMatch(ass, /,Title,,/);
   assert.doesNotMatch(ass, /,Bar,,/);
   assert.match(ass, /,Cta,,/);
+});
+
+test('a soft scrim sits under the brand and the captions, below the text layer', () => {
+  const spec = fromBrief({ title: 'اكسبرتو', captions: ['واحد', 'اثنين'], format: '9:16', seconds: 12 });
+  const events = buildOverlay(spec).split('\n').filter((line) => line.startsWith('Dialogue:'));
+  const scrims = events.filter((line) => line.includes(',Scrim,'));
+  assert.equal(scrims.length, 2);
+  assert.ok(scrims.every((line) => line.startsWith('Dialogue: 0,') && /\\blur\d+/.test(line)));
+  assert.ok(events.filter((line) => !line.includes(',Scrim,')).every((line) => line.startsWith('Dialogue: 1,')));
+  // The caption band ends when the outro starts, so it never covers the 3D title.
+  assert.ok(scrims.some((line) => line.includes(`,${assTime(spec.scenes.at(-1).start + 0.2)},Scrim,`)));
 });

@@ -51,7 +51,7 @@ export function installWorkerKey(store, input) {
   if (!assertTokenShape(input.token)) throw new Error('token must be 24 to 256 URL-safe characters');
   const engines = input.engines?.length ? input.engines : ['moneyprinter'];
   for (const engine of engines) {
-    if (!['moneyprinter', 'template', 'external'].includes(engine)) throw new Error('worker engine is invalid');
+    if (!['moneyprinter', 'template', 'external', 'blender', 'ugc'].includes(engine)) throw new Error('worker engine is invalid');
   }
   store.upsertKey({
     id: input.id,

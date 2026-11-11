@@ -1,5 +1,5 @@
 import '../globals.css';
-import { languages } from '../../lib/site';
+import { languages, site } from '../../lib/site';
 import { siteUrl } from '../../lib/seo';
 
 export const dynamicParams = false;
@@ -31,6 +31,9 @@ export default async function RootLayout({ children, params }) {
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Alexandria:wght@500;700;800;900&family=Rubik:wght@400;500;600;700&display=swap"
         />
+        {site.analytics.src && site.analytics.websiteId && (
+          <script defer src={site.analytics.src} data-website-id={site.analytics.websiteId} data-domains={site.domain} data-do-not-track="true" />
+        )}
       </head>
       <body>{children}</body>
     </html>

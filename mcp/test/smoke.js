@@ -43,10 +43,14 @@ r = await call('arabic_fonts', { mood: 'luxury' });
 assert.ok(r.structuredContent.pairings.some((p) => p.id === 'luxury'));
 
 r = await call('get_pricing', {});
-assert.equal(r.structuredContent.galleryBySize[0].price, 1900);
+assert.equal(r.structuredContent.galleryBySize[0].listPrice, 1900);
+assert.equal(r.structuredContent.galleryBySize[0].price, 1330); // 30% launch offer
+assert.equal(r.structuredContent.launchOffer.percentOff, 30);
+assert.match(r.structuredContent.packages[0].note, /1,330/);
 
 r = await call('create_order_link', { design_id: 'muftah', size: 'five', business_name: 'مكتب مفتاح', phone: '0551234567' });
 assert.match(r.structuredContent.link, /^https:\/\/wa\.me\/966541555511\?text=/);
+assert.equal(r.structuredContent.total, 3430);
 r = await call('create_order_link', { design_id: 'muftah', size: 'five', business_name: 'x', phone: '123' });
 assert.equal(r.isError, true);
 

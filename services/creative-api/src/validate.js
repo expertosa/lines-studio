@@ -79,6 +79,11 @@ export async function validateJob(body, options) {
   if (typeof body.format !== 'string' || !FORMATS.includes(body.format)) check.add('format', 'enum');
   if (typeof body.language !== 'string' || !LANGUAGES.includes(body.language)) check.add('language', 'enum');
   if (!SECONDS.includes(body.seconds)) check.add('seconds', 'enum');
+  else if (style && !style.seconds.includes(body.seconds)) check.add('seconds', 'enum');
+  if (style && typeof body.format === 'string' && FORMATS.includes(body.format) && !style.formats.includes(body.format)) {
+    check.add('format', 'enum');
+  }
+  if (style?.requiresScript && !script?.text) check.add('script.text', 'required');
   let voice = null;
   if (style && LANGUAGES.includes(body.language)) {
     const choices = style.voices[body.language];

@@ -5,6 +5,9 @@ import { t } from '../../lib/dict';
 import { site } from '../../lib/site';
 import { pageMeta } from '../../lib/seo';
 import { featuredWorks } from '../../lib/work';
+import { socialCopy } from '../../lib/social';
+import Price, { offerBadge, todayFmt } from '../../components/Price';
+import { launchOffer, promoText } from '../../lib/promo';
 
 export async function generateMetadata({ params }) {
   const { lang } = await params;
@@ -16,6 +19,7 @@ export default async function Home({ params }) {
   const { lang } = await params;
   const d = t(lang);
   const wa = `https://wa.me/${site.whatsapp}`;
+  const sc = socialCopy[lang] || socialCopy.ar;
   const items = [...d.marquee, ...d.marquee, ...d.marquee, ...d.marquee];
 
   return (
@@ -52,7 +56,7 @@ export default async function Home({ params }) {
             </div>
             <div className="sticker" style={{ bottom: 0, insetInlineStart: 120 }}>
               <span>{d.hero.from}</span>
-              <strong>1,900</strong>
+              <strong>{todayFmt(1900)}</strong>
               <span>{d.hero.sar}</span>
             </div>
           </div>
@@ -72,6 +76,7 @@ export default async function Home({ params }) {
           <h2 className="h2">{d.packages.title}</h2>
           <p className="lead">{d.packages.sub}</p>
         </div>
+        {offerBadge(lang) && <p className="offer-note"><b>{offerBadge(lang)}</b> · {(promoText[lang] || promoText.ar).months(launchOffer.subscriptionMonths)}</p>}
         <div className="grid-3">
           {d.packages.items.map((p, i) => {
             const href = p.href === 'gallery' ? `/${lang}/gallery/` : wa;
@@ -81,11 +86,11 @@ export default async function Home({ params }) {
                 <span className="tag">{p.tag}</span>
                 <h3>{p.name}</h3>
                 <p style={{ fontSize: 17, lineHeight: 1.8 }}>{p.desc}</p>
-                <div className="price">{p.price} <span>{p.unit}</span></div>
-                <p style={{ fontSize: 15 }}>{p.note}</p>
+                <div className="price"><Price amount={p.amount} plus={p.plus} /> <span>{p.unit}</span></div>
+                <p style={{ fontSize: 15 }}>{p.note(todayFmt)}</p>
                 {p.href === 'gallery'
                   ? <Link className={`btn ${btn}`} href={href}>{p.cta}</Link>
-                  : <a className={`btn ${btn}`} href={href}>{p.cta}</a>}
+                  : <a className={`btn ${btn}`} href={href} data-umami-event="whatsapp" data-umami-event-place={`package-${i + 1}`}>{p.cta}</a>}
               </div>
             );
           })}
@@ -128,13 +133,48 @@ export default async function Home({ params }) {
         </div>
       </section>
 
-      <section className="wrap" style={{ paddingBottom: 96 }}>
+      <section id="video" className="dark">
+        <div className="wrap section video-band">
+          <figure className="video-sample">
+            <video src="/video/launch-3d-ar.mp4" poster="/video/launch-3d-ar.webp" width={720} height={1280} muted loop playsInline autoPlay preload="metadata" aria-label={d.video.sample} />
+            <figcaption>{d.video.sample}</figcaption>
+          </figure>
+          <div className="video-copy">
+            <span className="pill">{d.video.tag}</span>
+            <h2 className="h2">{d.video.title}</h2>
+            <p className="lead">{d.video.sub}</p>
+            <div className="video-items">
+              {d.video.items.map((v, i) => (
+                <div key={v.name} className={`video-item video-item-${i + 1}`}>
+                  <h3>{v.name}</h3>
+                  <p>{v.desc}</p>
+                  <span>{v.note}</span>
+                </div>
+              ))}
+            </div>
+            <p className="video-price">{d.video.price}</p>
+            <a className="btn btn-lime" href={`${wa}?text=${encodeURIComponent(d.video.wa)}`} data-umami-event="whatsapp" data-umami-event-place="video">{d.video.cta}</a>
+          </div>
+        </div>
+      </section>
+
+      <section className="wrap" style={{ paddingTop: 72 }}>
+        <div className="social-strip">
+          <div>
+            <h2>{sc.homeT}</h2>
+            <p>{sc.homeS}</p>
+          </div>
+          <Link className="btn btn-ink" href={`/${lang}/social/`}>{sc.homeC}</Link>
+        </div>
+      </section>
+
+      <section className="wrap" style={{ paddingBottom: 96, paddingTop: 24 }}>
         <div className="trial">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: '1 1 420px' }}>
             <h2>{d.trial.title}</h2>
-            <p style={{ fontSize: 19, color: '#333' }}>{d.trial.sub}</p>
+            <p style={{ fontSize: 19, color: '#333' }}>{d.trial.sub(todayFmt)}</p>
           </div>
-          <a className="btn btn-ink" href={wa}>{d.trial.cta}</a>
+          <a className="btn btn-ink" href={wa} data-umami-event="whatsapp" data-umami-event-place="trial">{d.trial.cta}</a>
         </div>
       </section>
 

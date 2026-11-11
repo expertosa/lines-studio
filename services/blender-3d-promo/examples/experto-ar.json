@@ -1,0 +1,16 @@
+{
+  "title": "اكسبرتو",
+  "captions": [
+    { "text": "نساعد منشأتك تتحول بالذكاء الاصطناعي" },
+    { "text": "حلول جاهزة، وتنفيذ سريع" },
+    { "text": "من الفكرة إلى الإطلاق" }
+  ],
+  "brand": "خطوط ستوديو",
+  "cta": "اطلب عرضك الآن",
+  "language": "ar",
+  "format": "9:16",
+  "seconds": 15,
+  "hero": { "type": "phone", "image": "../../../public/work/experto.webp" },
+  "palette": "#101828,#A78BFA,#4FD1C5,#FFFFFF",
+  "quality": "final"
+}

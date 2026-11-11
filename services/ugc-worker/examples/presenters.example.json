@@ -1,0 +1,13 @@
+{
+  "default": "yousef",
+  "presenters": [
+    {
+      "id": "yousef",
+      "name": "يوسف — رجل سعودي، سيلفي من المكتب",
+      "image": "yousef.png",
+      "voiceId": "nhJWWCFdNdusuVUT3x19",
+      "languages": ["ar"],
+      "prompt": "Casual, genuine selfie-video delivery like a real customer recommending a product to friends: lively eyebrows, natural head nods and small tilts, quick smiles between phrases, slight handheld sway. Warm, excited but believable energy."
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@lines-studio/blender-3d-promo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Procedural 3D promo videos rendered with Blender from a JSON brief.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "lines-promo3d": "src/cli.js"
+  },
+  "scripts": {
+    "render": "node src/cli.js",
+    "worker": "node src/worker.js",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/api.js && node --check src/cli.js && node --check src/fonts.js && node --check src/overlay.js && node --check src/paths.js && node --check src/render.js && node --check src/spec.js && node --check src/worker.js && python3 -m py_compile blender/promo3d.py blender/arabic.py"
+  }
+}

@@ -217,3 +217,79 @@ img { max-width: 100%; }
 .tool p { color: #333; line-height: 1.8; }
 .tries { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .tries li { border-inline-start: 4px solid var(--lime); background: #1e1e1e; border-radius: 20px; padding: 20px; font-size: 18px; line-height: 1.7; }
+
+/* Launch video */
+.video-band { display: grid; grid-template-columns: minmax(220px, 340px) 1fr; gap: 56px; align-items: center; }
+.video-sample { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.video-sample video { width: 100%; height: auto; aspect-ratio: 9 / 16; border-radius: 28px; background: #1e1e1e; display: block; }
+.video-sample figcaption { font-size: 14px; color: var(--soft); text-align: center; }
+.video-copy { display: flex; flex-direction: column; gap: 22px; align-items: flex-start; }
+.video-copy .lead { color: var(--soft); max-width: 560px; }
+.video-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; width: 100%; }
+.video-item { border-radius: 24px; padding: 24px; display: flex; flex-direction: column; gap: 10px; color: var(--ink); }
+.video-item h3 { font-size: 24px; font-weight: 800; }
+.video-item p { line-height: 1.8; }
+.video-item span { font-size: 14px; font-weight: 600; margin-top: auto; }
+.video-item-1 { background: var(--lilac); }
+.video-item-2 { background: var(--coral); }
+.video-price { color: var(--soft); font-size: 15px; }
+@media (max-width: 760px) {
+  .video-band { grid-template-columns: 1fr; gap: 36px; }
+  .video-sample { max-width: 300px; margin-inline: auto; order: 2; }
+}
+
+/* Order add-on */
+.addon { display: flex; gap: 14px; align-items: flex-start; border: 2px solid var(--line); border-radius: 18px; padding: 16px 18px; cursor: pointer; }
+.addon:has(input:checked) { border-color: var(--ink); background: #fff; }
+.addon input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--ink); flex: none; }
+.addon span { display: flex; flex-direction: column; gap: 4px; }
+.addon small { font-size: 14px; color: var(--muted); }
+
+/* Social media management */
+.social-hero { display: flex; flex-direction: column; gap: 24px; align-items: flex-start; }
+.social-hero h1 { font-size: clamp(42px, 7vw, 76px); line-height: 1.2; font-weight: 900; max-width: 900px; }
+.social-platforms { color: var(--lilac); font-weight: 600; font-size: 16px; }
+.steps-light { margin-top: 28px; }
+.steps-light .step { background: #fff; border: 2px solid var(--line); }
+.steps-light .step p { color: var(--muted); }
+.social-plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+.social-plan { background: #1e1e1e; border-radius: 28px; padding: 28px; display: flex; flex-direction: column; gap: 16px; }
+.social-plan-featured { background: #fff; color: var(--ink); outline: 4px solid var(--lime); }
+.social-plan .tag { align-self: flex-start; padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+.social-plan h3 { font-size: 28px; font-weight: 800; }
+.social-plan .price { font-family: var(--display); font-size: 38px; font-weight: 900; }
+.social-plan .price span { font-size: 15px; font-weight: 700; }
+.social-plan ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; line-height: 1.6; }
+.social-plan li::before { content: '✦'; color: var(--lime); margin-inline-end: 8px; }
+.social-plan-featured li::before { color: #7b61e8; }
+.social-plan .btn { margin-top: auto; }
+.faq { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; max-width: 860px; }
+.faq details { border: 2px solid var(--line); border-radius: 20px; padding: 18px 22px; background: #fff; }
+.faq summary { font-weight: 700; font-size: 18px; cursor: pointer; }
+.faq p { margin-top: 10px; line-height: 1.8; color: var(--muted); }
+.social-strip { border: 2px solid var(--ink); border-radius: 32px; padding: 32px 36px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 20px; }
+.social-strip h2 { font-size: clamp(26px, 3.5vw, 36px); font-weight: 900; }
+.social-strip p { color: var(--muted); font-size: 17px; margin-top: 6px; }
+
+/* Discounts and promo codes */
+.offer-bar { background: var(--lime); color: var(--ink); text-align: center; font-weight: 600; font-size: 14px; padding: 8px 16px; line-height: 1.6; }
+.offer-note { font-size: 16px; margin-top: 16px; }
+.offer-note b { background: var(--lime); color: var(--ink); padding: 2px 10px; border-radius: 999px; }
+s.was { opacity: .5; font-weight: 600; font-size: .55em; text-decoration-thickness: 2px; }
+.size s.was, .sum-line s { font-size: .9em; }
+.sum-line { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; color: var(--soft); }
+.sum-line s { opacity: .6; margin-inline-end: 6px; }
+.promo { display: flex; flex-direction: column; gap: 6px; }
+.promo-row { display: flex; gap: 8px; }
+.promo input { flex: 1; min-width: 0; border-radius: 12px; border: 1px solid #444; background: #1e1e1e; color: #fff; padding: 10px 12px; font: inherit; letter-spacing: .04em; }
+.promo button { border: 0; border-radius: 12px; padding: 10px 16px; font: inherit; font-weight: 700; background: #fff; color: var(--ink); cursor: pointer; }
+.promo button:disabled { opacity: .5; cursor: default; }
+.promo-ok { flex-direction: row; justify-content: space-between; align-items: center; gap: 10px; background: #233000; color: var(--lime); border-radius: 12px; padding: 10px 12px; font-size: 15px; }
+.promo-ok button { background: transparent; color: #fff; text-decoration: underline; padding: 0; }
+.promo-err { color: var(--coral); font-size: 14px; }
+.social-promo { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; }
+.social-promo .offer-note { margin: 0; color: #fff; }
+.social-promo .promo { flex: 0 1 340px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.price span.now { font-size: inherit; font-weight: inherit; color: inherit; }
+.price > span:not(.now) { white-space: nowrap; }

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.lines.ugc-worker</string>
+  <key>WorkingDirectory</key>
+  <string>/Volumes/Data/lines-video-worker/ugc</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Volumes/Data/lines-video-worker/ugc/app/src/index.js</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>LINES_WORKER_ROOT</key>
+    <string>/Volumes/Data/lines-video-worker</string>
+    <key>LINES_API_BASE</key>
+    <string>https://api.lines.studio</string>
+    <key>LINES_WORKER_TOKEN_FILE</key>
+    <string>/Volumes/Data/lines-video-worker/secrets/ugc-worker-token</string>
+    <key>ELEVENLABS_KEY_FILE</key>
+    <string>/Volumes/Data/lines-video-worker/secrets/elevenlabs-key</string>
+    <key>FAL_KEY_FILE</key>
+    <string>/Volumes/Data/lines-video-worker/secrets/fal-key</string>
+    <key>UGC_TTS_MODEL</key>
+    <string>eleven_v3</string>
+    <key>UGC_FONT_AR</key>
+    <string>Noto Naskh Arabic</string>
+    <key>TMPDIR</key>
+    <string>/Volumes/Data/lines-video-worker/ugc/tmp</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Volumes/Data/lines-video-worker/ugc/logs/worker.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Volumes/Data/lines-video-worker/ugc/logs/worker.err.log</string>
+</dict>
+</plist>

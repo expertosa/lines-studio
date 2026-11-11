@@ -400,7 +400,7 @@ components:
         language: { $ref: "#/components/schemas/Language" }
         seconds: { type: integer }
         voice: { type: string }
-        engine: { type: string, enum: [moneyprinter, template, external] }
+        engine: { type: string, enum: [moneyprinter, template, external, blender, ugc] }
         endUserId: { type: string, nullable: true }
         prompt: { type: string, nullable: true }
         script: { type: object, nullable: true }
@@ -442,8 +442,11 @@ components:
         format: { $ref: "#/components/schemas/Format" }
         language: { $ref: "#/components/schemas/Language" }
         seconds: { type: integer }
-        voice: { type: string }
+        voice: { type: string, description: "Edge TTS voice, or \"presenter\" for ugc (the presenter's own voice)" }
+        metadata: { type: object, additionalProperties: true, description: "Caller metadata; workers read render options from it (promo3d palette/hero, ugc presenter)" }
         engine: { type: string }
+        width: { type: integer }
+        height: { type: integer }
         attempt: { type: integer }
         deadlineAt: { type: string, format: date-time }
     Quote:

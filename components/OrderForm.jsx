@@ -8,6 +8,8 @@ import { designs, sizes } from '../lib/designs';
 import { t } from '../lib/dict';
 import { site } from '../lib/site';
 import { isSaudiMobile } from '../lib/phone';
+import { launchOffer, launchPrice, offerActive, promoText, withCode } from '../lib/promo';
+import PromoCode from './PromoCode';
 
 const fmt = (n) => n.toLocaleString('en-US');
 
@@ -16,9 +18,14 @@ export default function OrderForm({ lang }) {
   const params = useSearchParams();
   const design = designs.find((x) => x.id === params.get('design')) || designs[0];
   const [sizeId, setSizeId] = useState('five');
-  const [form, setForm] = useState({ name: '', city: '', phone: '', details: '', ar: true, en: true });
+  const [form, setForm] = useState({ name: '', city: '', phone: '', details: '', ar: true, en: true, video: false });
   const [errors, setErrors] = useState({});
+  const [promo, setPromo] = useState(null);
   const size = sizes.find((s) => s.id === sizeId);
+  const p = promoText[lang] || promoText.ar;
+  const afterLaunch = launchPrice(size.price);
+  const total = withCode(afterLaunch, promo?.pct);
+  const sar = lang === 'ar' ? 'ريال' : 'SAR';
 
   const set = (k) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -46,12 +53,17 @@ export default function OrderForm({ lang }) {
       d.waIntro,
       `• ${d.design}: ${design.name[lang]} (${design.id})`,
       `• ${d.size}: ${size.label[lang]} — ${fmt(size.price)} SAR`,
+      offerActive() && `• ${p.launch(launchOffer.pct)}: ${fmt(afterLaunch)} SAR`,
+      promo && `• ${p.codeLine(promo.code, promo.pct)}`,
+      `• ${d.total}: ${fmt(total)} SAR`,
       `• ${d.name}: ${form.name}`,
       form.city && `• ${d.city}: ${form.city}`,
       `• ${d.phone}: ${form.phone}`,
       `• ${d.langs}: ${langs}`,
       form.details && `• ${d.details}: ${form.details}`,
+      form.video && `• ${d.video}: ${d.videoYes}`,
     ].filter(Boolean).join('\n');
+    window.umami?.track('order', { design: design.id, size: size.id, video: form.video ? 'yes' : 'no', promo: promo ? promo.code : 'none' });
     window.open(`https://wa.me/${site.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
   };
 
@@ -81,7 +93,9 @@ export default function OrderForm({ lang }) {
               <button key={s.id} type="button" role="radio" aria-checked={sizeId === s.id} className="size" onClick={() => setSizeId(s.id)}>
                 <strong>{s.label[lang]}</strong>
                 <span>{s.hint[lang]}</span>
-                <b>{fmt(s.price)} {lang === 'ar' ? 'ريال' : 'SAR'}</b>
+                <b>
+                  {launchPrice(s.price) !== s.price && <s className="was">{fmt(s.price)}</s>} {fmt(launchPrice(s.price))} {sar}
+                </b>
               </button>
             ))}
           </div>
@@ -111,6 +125,13 @@ export default function OrderForm({ lang }) {
             <label><input type="checkbox" checked={form.en} onChange={set('en')} />{d.langEn}</label>
             {errors.langs && <span className="field-err" id="order-langs-error" role="alert">{errors.langs}</span>}
           </div>
+          <label className="addon">
+            <input type="checkbox" checked={form.video} onChange={set('video')} />
+            <span>
+              <strong>{d.addVideo}</strong>
+              <small>{d.addVideoHint}</small>
+            </span>
+          </label>
         </fieldset>
       </div>
 
@@ -121,10 +142,18 @@ export default function OrderForm({ lang }) {
           <dt>{d.size}</dt><dd>{size.label[lang]}</dd>
           <dt>{d.delivery}</dt><dd>{d.days(size.days)}</dd>
           <dt>{d.includes}</dt><dd>{d.includesV}</dd>
+          {form.video && <><dt>{d.video}</dt><dd>{d.videoYes}</dd></>}
         </dl>
+        {afterLaunch !== size.price && (
+          <div className="sum-line"><span>{p.launch(launchOffer.pct)}</span><span><s>{fmt(size.price)}</s> {fmt(afterLaunch)} {sar}</span></div>
+        )}
+        {promo && (
+          <div className="sum-line"><span>{p.codeLine(promo.code, promo.pct)}</span><span>−{fmt(afterLaunch - total)} {sar}</span></div>
+        )}
+        <PromoCode lang={lang} scope="sites" value={promo} onChange={setPromo} />
         <div className="total">
           <span>{d.total}</span>
-          <span><b>{fmt(size.price)}</b> {lang === 'ar' ? 'ريال' : 'SAR'}</span>
+          <span><b>{fmt(total)}</b> {sar}</span>
         </div>
         {Object.values(errors).some(Boolean) && <p className="err" role="alert">{d.required}</p>}
         <button type="submit" className="btn btn-lime">{d.submit}</button>

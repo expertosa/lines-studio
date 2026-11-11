@@ -48,6 +48,7 @@ def parse_args():
     parser.add_argument("--frames", required=True, help="directory for frame_####.png")
     parser.add_argument("--still", type=int, default=0, help="render only this frame (1-based)")
     parser.add_argument("--save-blend", default="", help="also save the generated .blend")
+    parser.add_argument("--resume", action="store_true", help="skip frames that already exist")
     return parser.parse_args(argv)
 
 
@@ -769,6 +770,9 @@ def main():
     print(f"PROMO3D_READY engine={engine} frames={frames}", flush=True)
     if args.save_blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(args.save_blend))
+    if args.resume:
+        scene.render.use_overwrite = False  # Blender skips frame files that already exist
+        scene.render.use_placeholder = False
     if args.still:
         scene.frame_set(max(1, min(frames, args.still)))
         scene.render.filepath = os.path.join(os.path.abspath(args.frames), f"still_{args.still:04d}.png")

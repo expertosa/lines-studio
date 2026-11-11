@@ -21,6 +21,7 @@ Options:
   --music <file>         Background music (looped, faded)
   --save-blend           Also save the generated scene as a .blend next to the video
   --keep-frames          Keep the PNG frames
+  --resume               Continue a stopped render (same brief and options) from its frames
   --blender <path>       Blender binary (env BLENDER_BIN, default "blender")
   --python <path>        Use a Python that has the bpy module instead of Blender
   --fonts-dir <dir>      Extra font directory for the text layer
@@ -47,6 +48,7 @@ const { values, positionals } = parseArgs({
     music: { type: 'string' },
     'save-blend': { type: 'boolean' },
     'keep-frames': { type: 'boolean' },
+    resume: { type: 'boolean' },
     blender: { type: 'string' },
     python: { type: 'string' },
     'fonts-dir': { type: 'string' },
@@ -111,6 +113,7 @@ try {
       fontsDir: values['fonts-dir'] ? path.resolve(values['fonts-dir']) : null,
       saveBlend: values['save-blend'] ? outFile.replace(/\.mp4$/i, '.blend') : null,
       keepFrames: values['keep-frames'],
+      resume: values.resume,
       signal: controller.signal,
       onProgress(event) {
         if (event.stage === 'frames') {

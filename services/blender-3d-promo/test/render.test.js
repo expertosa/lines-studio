@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { encodeArgs, renderPromo, sceneCommand } from '../src/render.js';
+import { canResume, encodeArgs, renderPromo, sceneCommand } from '../src/render.js';
 import { fromBrief } from '../src/spec.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -82,6 +82,23 @@ test('a Blender failure is reported as a retryable render error', { skip: !fs.ex
       renderPromo(fromBrief({ title: 'x', seconds: 5 }), { workDir: dir, outFile: path.join(dir, 'o.mp4'), blender: '/nonexistent/blender' }),
       (error) => error.code === 'render_failed' && error.retry === false && /could not start/.test(error.message),
     );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resume only continues the same spec and redoes the last frame', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promo3d-'));
+  try {
+    const frames = path.join(dir, 'frames');
+    fs.mkdirSync(frames);
+    for (const n of ['0001', '0002', '0003']) fs.writeFileSync(path.join(frames, `frame_${n}.png`), 'x');
+    fs.writeFileSync(path.join(dir, 'spec.json'), '{"a":1}');
+    assert.equal(canResume(path.join(dir, 'spec.json'), '{"a":2}', frames), false);
+    assert.equal(fs.readdirSync(frames).length, 3);
+    assert.equal(canResume(path.join(dir, 'spec.json'), '{"a":1}', frames), true);
+    assert.deepEqual(fs.readdirSync(frames).sort(), ['frame_0001.png', 'frame_0002.png']);
+    assert.equal(canResume(path.join(dir, 'missing.json'), '{"a":1}', frames), false);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

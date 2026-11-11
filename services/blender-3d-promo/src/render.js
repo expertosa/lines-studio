@@ -112,6 +112,24 @@ export function encodeArgs(spec, { framesDir, assPath, music, fontsDir, outFile 
 }
 
 /**
+ * Resume only when the previous run used the very same spec. The newest frame
+ * may have been cut off mid-write when that run was stopped, so it is redone.
+ */
+export function canResume(specPath, specJson, framesDir) {
+  try {
+    if (fs.readFileSync(specPath, 'utf8') !== specJson) return false;
+  } catch {
+    return false;
+  }
+  const frames = fs.existsSync(framesDir)
+    ? fs.readdirSync(framesDir).filter((name) => /^frame_\d{4}\.png$/.test(name)).sort()
+    : [];
+  if (frames.length === 0) return false;
+  fs.rmSync(path.join(framesDir, frames.at(-1)), { force: true });
+  return true;
+}
+
+/**
  * Render a spec to MP4 (+ JPEG thumbnail).
  * 1. Blender builds the scene and writes frame_####.png.
  * 2. ffmpeg scales, burns the ASS typography, adds optional music, encodes H.264.
@@ -126,22 +144,26 @@ export async function renderPromo(spec, {
   fonts = {},
   fontsDir = null,
   saveBlend = null,
+  resume = false,
   keepFrames = false,
   signal,
   onProgress,
 }) {
   fs.mkdirSync(workDir, { recursive: true });
   const framesDir = path.join(workDir, 'frames');
-  fs.rmSync(framesDir, { recursive: true, force: true });
-  fs.mkdirSync(framesDir, { recursive: true });
   const specPath = path.join(workDir, 'spec.json');
   const assPath = path.join(workDir, 'overlay.ass');
-  fs.writeFileSync(specPath, JSON.stringify(spec, null, 2));
+  const specJson = JSON.stringify(spec, null, 2);
+  const resuming = resume && canResume(specPath, specJson, framesDir);
+  if (!resuming) fs.rmSync(framesDir, { recursive: true, force: true });
+  fs.mkdirSync(framesDir, { recursive: true });
+  fs.writeFileSync(specPath, specJson);
   fs.writeFileSync(assPath, buildOverlay(spec, { fonts }), 'utf8');
 
   const total = Math.round(spec.seconds * spec.fps);
   const scriptArgs = ['--spec', specPath, '--frames', framesDir];
   if (saveBlend) scriptArgs.push('--save-blend', saveBlend);
+  if (resuming) scriptArgs.push('--resume');
   const [bin, args] = sceneCommand({ blender, python }, scriptArgs);
   await run(bin, args, {
     workDir,

@@ -3,11 +3,20 @@ import LangSwitch from './LangSwitch';
 import { t } from '../lib/dict';
 import { site } from '../lib/site';
 import { socialCopy } from '../lib/social';
+import { launchOffer, offerActive } from '../lib/promo';
 
 export default function Header({ lang, path = '' }) {
   const d = t(lang);
+  const ar = lang === 'ar';
   return (
     <div className="dark">
+      {offerActive() && (
+        <p className="offer-bar">
+          {ar
+            ? `${launchOffer.label.ar}: ${launchOffer.pct}% على كل الباقات. وعندك كود خصم؟ أضفه وقت الطلب.`
+            : `${launchOffer.label.en}: ${launchOffer.pct}% off every plan. Have a promo code? Add it when you order.`}
+        </p>
+      )}
       <header className="wrap header">
         <Link href={`/${lang}/`} className="logo">
           <span className="logo-mark" aria-hidden="true">

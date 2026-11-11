@@ -9,6 +9,7 @@ import { fonts, pairings, fontLink } from './fonts.js';
 import { audit } from './audit.js';
 import { site } from '../../lib/site.js';
 import { t } from '../../lib/dict.js';
+import { launchOffer, launchPrice, offerActive } from '../../lib/promo.js';
 import { isSaudiMobile } from '../../lib/phone.js';
 
 const VERSION = '0.1.0';
@@ -129,9 +130,13 @@ export function buildServer() {
     return json({
       currency: 'SAR',
       vat: lang === 'ar' ? 'الأسعار نهائية، المنشأة غير مسجلة في ضريبة القيمة المضافة' : 'Final prices; the business is not VAT-registered',
-      galleryBySize: sizes.map((s) => ({ id: s.id, label: s.label[lang], hint: s.hint[lang], price: s.price, deliveryDays: s.days })),
-      packages: d.packages.items.map((p) => ({ name: p.name, description: p.desc, price: p.price, unit: p.unit, note: p.note })),
-      trialWeek: { title: d.trial.title, description: d.trial.sub },
+      launchOffer: offerActive()
+        ? { percentOff: launchOffer.pct, ends: launchOffer.ends, subscriptionMonths: launchOffer.subscriptionMonths, label: launchOffer.label[lang] }
+        : null,
+      promoCodes: lang === 'ar' ? 'أكواد الخصم تُدخل في صفحة الطلب على الموقع، وتنطبق فوق خصم الإطلاق.' : 'Promo codes are entered on the order page of the site and apply on top of the launch offer.',
+      galleryBySize: sizes.map((s) => ({ id: s.id, label: s.label[lang], hint: s.hint[lang], listPrice: s.price, price: launchPrice(s.price), deliveryDays: s.days })),
+      packages: d.packages.items.map((p) => ({ name: p.name, description: p.desc, listPrice: p.amount, price: launchPrice(p.amount), from: Boolean(p.plus), unit: p.unit, note: p.note((n) => fmt(launchPrice(n))) })),
+      trialWeek: { title: d.trial.title, description: d.trial.sub((n) => fmt(launchPrice(n))) },
       contact: { whatsapp: `https://wa.me/${site.whatsapp}`, email: site.email, website: `https://${site.domain}/${lang}/` },
     });
   });
@@ -160,6 +165,7 @@ export function buildServer() {
       d.waIntro,
       `• ${d.design}: ${design.name[lang]} (${design.id})`,
       `• ${d.size}: ${s.label[lang]} — ${fmt(s.price)} SAR`,
+      offerActive() && `• ${launchOffer.label[lang]} ${launchOffer.pct}%: ${fmt(launchPrice(s.price))} SAR`,
       `• ${d.name}: ${business_name}`,
       city && `• ${d.city}: ${city}`,
       `• ${d.phone}: ${phone}`,
@@ -170,7 +176,8 @@ export function buildServer() {
     return json({
       link: `https://wa.me/${site.whatsapp}?text=${encodeURIComponent(msg)}`,
       orderPage: `https://${site.domain}/${lang}/order/?design=${design.id}`,
-      total: s.price,
+      total: launchPrice(s.price),
+      listPrice: s.price,
       currency: 'SAR',
       deliveryDays: s.days,
       message: msg,

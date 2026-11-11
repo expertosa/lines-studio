@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import GalleryGrid from '../../../components/GalleryGrid';
+import { todayFmt } from '../../../components/Price';
 import { t } from '../../../lib/dict';
 import { pageMeta } from '../../../lib/seo';
 
@@ -31,7 +32,7 @@ export default async function Gallery({ params }) {
         <div className="cta-box">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <strong style={{ fontSize: 18 }}>{d.gallery.customT}</strong>
-            <span style={{ color: '#4a4f57' }}>{d.gallery.customS}</span>
+            <span style={{ color: '#4a4f57' }}>{d.gallery.customS(todayFmt)}</span>
           </div>
           <Link className="btn btn-ink" href={`/${lang}/#packages`}>{d.gallery.customC}</Link>
         </div>

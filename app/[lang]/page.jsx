@@ -6,6 +6,8 @@ import { site } from '../../lib/site';
 import { pageMeta } from '../../lib/seo';
 import { featuredWorks } from '../../lib/work';
 import { socialCopy } from '../../lib/social';
+import Price, { offerBadge, todayFmt } from '../../components/Price';
+import { launchOffer, promoText } from '../../lib/promo';
 
 export async function generateMetadata({ params }) {
   const { lang } = await params;
@@ -54,7 +56,7 @@ export default async function Home({ params }) {
             </div>
             <div className="sticker" style={{ bottom: 0, insetInlineStart: 120 }}>
               <span>{d.hero.from}</span>
-              <strong>1,900</strong>
+              <strong>{todayFmt(1900)}</strong>
               <span>{d.hero.sar}</span>
             </div>
           </div>
@@ -74,6 +76,7 @@ export default async function Home({ params }) {
           <h2 className="h2">{d.packages.title}</h2>
           <p className="lead">{d.packages.sub}</p>
         </div>
+        {offerBadge(lang) && <p className="offer-note"><b>{offerBadge(lang)}</b> · {(promoText[lang] || promoText.ar).months(launchOffer.subscriptionMonths)}</p>}
         <div className="grid-3">
           {d.packages.items.map((p, i) => {
             const href = p.href === 'gallery' ? `/${lang}/gallery/` : wa;
@@ -83,8 +86,8 @@ export default async function Home({ params }) {
                 <span className="tag">{p.tag}</span>
                 <h3>{p.name}</h3>
                 <p style={{ fontSize: 17, lineHeight: 1.8 }}>{p.desc}</p>
-                <div className="price">{p.price} <span>{p.unit}</span></div>
-                <p style={{ fontSize: 15 }}>{p.note}</p>
+                <div className="price"><Price amount={p.amount} plus={p.plus} /> <span>{p.unit}</span></div>
+                <p style={{ fontSize: 15 }}>{p.note(todayFmt)}</p>
                 {p.href === 'gallery'
                   ? <Link className={`btn ${btn}`} href={href}>{p.cta}</Link>
                   : <a className={`btn ${btn}`} href={href} data-umami-event="whatsapp" data-umami-event-place={`package-${i + 1}`}>{p.cta}</a>}
@@ -169,7 +172,7 @@ export default async function Home({ params }) {
         <div className="trial">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: '1 1 420px' }}>
             <h2>{d.trial.title}</h2>
-            <p style={{ fontSize: 19, color: '#333' }}>{d.trial.sub}</p>
+            <p style={{ fontSize: 19, color: '#333' }}>{d.trial.sub(todayFmt)}</p>
           </div>
           <a className="btn btn-ink" href={wa} data-umami-event="whatsapp" data-umami-event-place="trial">{d.trial.cta}</a>
         </div>

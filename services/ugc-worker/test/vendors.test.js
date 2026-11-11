@@ -65,9 +65,16 @@ test('captions: tags stripped, short chunks, timed to the audio', () => {
     'تدرون وش اللي غيّر', 'شغلي هالشهر؟', 'اكسبرتو.',
   ]);
   const ass = buildCaptions('[excited] One two three four five. Six', { duration: 6, width: 1080, height: 1920, language: 'en' });
-  const events = ass.split('\n').filter((l) => l.startsWith('Dialogue:'));
+  const events = ass.split('\n').filter((l) => l.startsWith('Dialogue:') && l.includes(',Cap,'));
   assert.equal(events.length, 3);
+  assert.match(ass, /Dialogue: 1,0:00:00\.00,0:00:06\.00,Label,,0,0,0,,AI-generated/);
   assert.doesNotMatch(ass, /excited/);
   assert.match(events.at(-1), /,0:00:06\.00,Cap,/);
   assert.match(ass, /PlayResX: 1080\nPlayResY: 1920/);
+});
+
+test('the AI label stays when captions are off', () => {
+  const ass = buildCaptions('تدرون وش اللي غيّر شغلي', { duration: 5, width: 1080, height: 1920, language: 'ar', captions: false });
+  assert.match(ass, /,Label,,0,0,0,,مولّد بالذكاء الاصطناعي$/m);
+  assert.doesNotMatch(ass, /,Cap,,/);
 });

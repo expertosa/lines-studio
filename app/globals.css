@@ -217,3 +217,30 @@ img { max-width: 100%; }
 .tool p { color: #333; line-height: 1.8; }
 .tries { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .tries li { border-inline-start: 4px solid var(--lime); background: #1e1e1e; border-radius: 20px; padding: 20px; font-size: 18px; line-height: 1.7; }
+
+/* Launch video */
+.video-band { display: grid; grid-template-columns: minmax(220px, 340px) 1fr; gap: 56px; align-items: center; }
+.video-sample { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.video-sample video { width: 100%; height: auto; aspect-ratio: 9 / 16; border-radius: 28px; background: #1e1e1e; display: block; }
+.video-sample figcaption { font-size: 14px; color: var(--soft); text-align: center; }
+.video-copy { display: flex; flex-direction: column; gap: 22px; align-items: flex-start; }
+.video-copy .lead { color: var(--soft); max-width: 560px; }
+.video-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; width: 100%; }
+.video-item { border-radius: 24px; padding: 24px; display: flex; flex-direction: column; gap: 10px; color: var(--ink); }
+.video-item h3 { font-size: 24px; font-weight: 800; }
+.video-item p { line-height: 1.8; }
+.video-item span { font-size: 14px; font-weight: 600; margin-top: auto; }
+.video-item-1 { background: var(--lilac); }
+.video-item-2 { background: var(--coral); }
+.video-price { color: var(--soft); font-size: 15px; }
+@media (max-width: 760px) {
+  .video-band { grid-template-columns: 1fr; gap: 36px; }
+  .video-sample { max-width: 300px; margin-inline: auto; order: 2; }
+}
+
+/* Order add-on */
+.addon { display: flex; gap: 14px; align-items: flex-start; border: 2px solid var(--line); border-radius: 18px; padding: 16px 18px; cursor: pointer; }
+.addon:has(input:checked) { border-color: var(--ink); background: #fff; }
+.addon input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--ink); flex: none; }
+.addon span { display: flex; flex-direction: column; gap: 4px; }
+.addon small { font-size: 14px; color: var(--muted); }

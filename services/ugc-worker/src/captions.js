@@ -5,6 +5,9 @@
  */
 export const DEFAULT_FONTS = Object.freeze({ ar: 'Noto Naskh Arabic', en: 'DejaVu Sans' });
 
+/** Shown for the whole clip, always: viewers must be able to tell the presenter is AI-generated. */
+export const AI_LABEL = Object.freeze({ ar: 'مولّد بالذكاء الاصطناعي', en: 'AI-generated' });
+
 function assTime(seconds) {
   const cs = Math.max(0, Math.round(seconds * 100));
   const s = Math.floor(cs / 100) % 60;
@@ -34,8 +37,8 @@ export function chunkScript(text, words = 4) {
   return chunks;
 }
 
-export function buildCaptions(text, { duration, width, height, language, font }) {
-  const chunks = chunkScript(text);
+export function buildCaptions(text, { duration, width, height, language, font, captions = true }) {
+  const chunks = captions ? chunkScript(text) : [];
   const weights = chunks.map((chunk) => chunk.replace(/\s/g, '').length + 2);
   const total = weights.reduce((a, b) => a + b, 0) || 1;
   const lead = Math.min(0.15, duration * 0.02);
@@ -49,6 +52,8 @@ export function buildCaptions(text, { duration, width, height, language, font })
     cursor += span;
     return line;
   });
+  const label = AI_LABEL[language] || AI_LABEL.en;
+  events.unshift(`Dialogue: 1,${assTime(0)},${assTime(duration)},Label,,0,0,0,,${escape(label)}`);
   return [
     '[Script Info]',
     'ScriptType: v4.00+',
@@ -60,6 +65,7 @@ export function buildCaptions(text, { duration, width, height, language, font })
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     `Style: Cap,${family},${size},&H00FFFFFF,&H000000FF,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,${Math.max(2, Math.round(size * 0.09))},2,2,${Math.round(width * 0.08)},${Math.round(width * 0.08)},${Math.round(height * 0.22)},1`,
+    `Style: Label,${family},${Math.round(Math.min(width, height) * 0.03)},&H30FFFFFF,&H000000FF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,3,${Math.max(4, Math.round(width * 0.008))},0,9,${Math.round(width * 0.05)},${Math.round(width * 0.05)},${Math.round(height * 0.04)},1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',

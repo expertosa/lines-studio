@@ -42,7 +42,7 @@ export async function audioSeconds(ffprobe, file, workDir) {
  * 1. presenter from metadata.presenter (photo + ElevenLabs voice)
  * 2. ElevenLabs reads script.text in that voice
  * 3. fal.ai OmniHuman animates the photo with lip sync
- * 4. ffmpeg burns captions (metadata.captions = "off" to skip) and grabs a thumbnail
+ * 4. ffmpeg burns the AI label and captions (metadata.captions = "off" skips the captions only) and grabs a thumbnail
  */
 export async function renderClaimedJob(job, deps) {
   const controller = new AbortController();
@@ -103,24 +103,22 @@ export async function renderClaimedJob(job, deps) {
     fs.writeFileSync(rawPath, await download(videoUrl, deps.fetchImpl, signal));
 
     const finalPath = path.join(workDir, 'ugc.mp4');
-    if (meta.captions === 'off') {
-      fs.copyFileSync(rawPath, finalPath);
-    } else {
-      const assPath = path.join(workDir, 'captions.ass');
-      fs.writeFileSync(assPath, buildCaptions(text, {
-        duration: seconds,
-        width: job.width || 1080,
-        height: job.height || 1920,
-        language: job.language,
-        font: deps.fonts?.[job.language],
-      }));
-      const esc = (p) => p.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
-      await tool(ffmpeg, [
-        '-y', '-hide_banner', '-loglevel', 'error', '-i', rawPath,
-        '-vf', `scale=${job.width || 1080}:${job.height || 1920}:force_original_aspect_ratio=increase,crop=${job.width || 1080}:${job.height || 1920},ass=${esc(assPath)}${deps.fontsDir ? `:fontsdir=${esc(deps.fontsDir)}` : ''},format=yuv420p`,
-        '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', finalPath,
-      ], { workDir, signal });
-    }
+    // The AI label is always burned in; metadata.captions = "off" only drops the spoken-word captions.
+    const assPath = path.join(workDir, 'captions.ass');
+    fs.writeFileSync(assPath, buildCaptions(text, {
+      duration: seconds,
+      width: job.width || 1080,
+      height: job.height || 1920,
+      language: job.language,
+      font: deps.fonts?.[job.language],
+      captions: meta.captions !== 'off',
+    }));
+    const esc = (p) => p.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
+    await tool(ffmpeg, [
+      '-y', '-hide_banner', '-loglevel', 'error', '-i', rawPath,
+      '-vf', `scale=${job.width || 1080}:${job.height || 1920}:force_original_aspect_ratio=increase,crop=${job.width || 1080}:${job.height || 1920},ass=${esc(assPath)}${deps.fontsDir ? `:fontsdir=${esc(deps.fontsDir)}` : ''},format=yuv420p`,
+      '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', finalPath,
+    ], { workDir, signal });
     const thumbPath = path.join(workDir, 'ugc.jpg');
     const thumb = await tool(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-ss', '1', '-i', finalPath, '-frames:v', '1', '-q:v', '3', thumbPath], { workDir, signal })
       .then(() => fs.existsSync(thumbPath)).catch(() => false);

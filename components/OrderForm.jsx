@@ -16,7 +16,7 @@ export default function OrderForm({ lang }) {
   const params = useSearchParams();
   const design = designs.find((x) => x.id === params.get('design')) || designs[0];
   const [sizeId, setSizeId] = useState('five');
-  const [form, setForm] = useState({ name: '', city: '', phone: '', details: '', ar: true, en: true });
+  const [form, setForm] = useState({ name: '', city: '', phone: '', details: '', ar: true, en: true, video: false });
   const [errors, setErrors] = useState({});
   const size = sizes.find((s) => s.id === sizeId);
 
@@ -51,7 +51,9 @@ export default function OrderForm({ lang }) {
       `• ${d.phone}: ${form.phone}`,
       `• ${d.langs}: ${langs}`,
       form.details && `• ${d.details}: ${form.details}`,
+      form.video && `• ${d.video}: ${d.videoYes}`,
     ].filter(Boolean).join('\n');
+    window.umami?.track('order', { design: design.id, size: size.id, video: form.video ? 'yes' : 'no' });
     window.open(`https://wa.me/${site.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
   };
 
@@ -111,6 +113,13 @@ export default function OrderForm({ lang }) {
             <label><input type="checkbox" checked={form.en} onChange={set('en')} />{d.langEn}</label>
             {errors.langs && <span className="field-err" id="order-langs-error" role="alert">{errors.langs}</span>}
           </div>
+          <label className="addon">
+            <input type="checkbox" checked={form.video} onChange={set('video')} />
+            <span>
+              <strong>{d.addVideo}</strong>
+              <small>{d.addVideoHint}</small>
+            </span>
+          </label>
         </fieldset>
       </div>
 
@@ -121,6 +130,7 @@ export default function OrderForm({ lang }) {
           <dt>{d.size}</dt><dd>{size.label[lang]}</dd>
           <dt>{d.delivery}</dt><dd>{d.days(size.days)}</dd>
           <dt>{d.includes}</dt><dd>{d.includesV}</dd>
+          {form.video && <><dt>{d.video}</dt><dd>{d.videoYes}</dd></>}
         </dl>
         <div className="total">
           <span>{d.total}</span>

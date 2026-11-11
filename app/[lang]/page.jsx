@@ -85,7 +85,7 @@ export default async function Home({ params }) {
                 <p style={{ fontSize: 15 }}>{p.note}</p>
                 {p.href === 'gallery'
                   ? <Link className={`btn ${btn}`} href={href}>{p.cta}</Link>
-                  : <a className={`btn ${btn}`} href={href}>{p.cta}</a>}
+                  : <a className={`btn ${btn}`} href={href} data-umami-event="whatsapp" data-umami-event-place={`package-${i + 1}`}>{p.cta}</a>}
               </div>
             );
           })}
@@ -128,13 +128,38 @@ export default async function Home({ params }) {
         </div>
       </section>
 
+      <section id="video" className="dark">
+        <div className="wrap section video-band">
+          <figure className="video-sample">
+            <video src="/video/launch-3d-ar.mp4" poster="/video/launch-3d-ar.webp" width={720} height={1280} muted loop playsInline autoPlay preload="metadata" aria-label={d.video.sample} />
+            <figcaption>{d.video.sample}</figcaption>
+          </figure>
+          <div className="video-copy">
+            <span className="pill">{d.video.tag}</span>
+            <h2 className="h2">{d.video.title}</h2>
+            <p className="lead">{d.video.sub}</p>
+            <div className="video-items">
+              {d.video.items.map((v, i) => (
+                <div key={v.name} className={`video-item video-item-${i + 1}`}>
+                  <h3>{v.name}</h3>
+                  <p>{v.desc}</p>
+                  <span>{v.note}</span>
+                </div>
+              ))}
+            </div>
+            <p className="video-price">{d.video.price}</p>
+            <a className="btn btn-lime" href={`${wa}?text=${encodeURIComponent(d.video.wa)}`} data-umami-event="whatsapp" data-umami-event-place="video">{d.video.cta}</a>
+          </div>
+        </div>
+      </section>
+
       <section className="wrap" style={{ paddingBottom: 96 }}>
         <div className="trial">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: '1 1 420px' }}>
             <h2>{d.trial.title}</h2>
             <p style={{ fontSize: 19, color: '#333' }}>{d.trial.sub}</p>
           </div>
-          <a className="btn btn-ink" href={wa}>{d.trial.cta}</a>
+          <a className="btn btn-ink" href={wa} data-umami-event="whatsapp" data-umami-event-place="trial">{d.trial.cta}</a>
         </div>
       </section>
 

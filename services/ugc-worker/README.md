@@ -5,7 +5,7 @@
 1. يختار المقدّم (صورة + صوت) من `metadata.presenter`.
 2. ElevenLabs يقرأ النص `script.text` بصوت المقدّم.
 3. OmniHuman 1.5 على fal.ai يحرّك الصورة مع مطابقة الشفايف للصوت.
-4. ffmpeg يكتب ترجمة عربية/إنجليزية على الفيديو، ويطلع صورة مصغّرة، ثم يرفعها للواجهة.
+4. ffmpeg يكتب ترجمة عربية/إنجليزية على الفيديو مع علامة «مولّد بالذكاء الاصطناعي» ثابتة بالزاوية، ويطلع صورة مصغّرة، ثم يرفعها للواجهة.
 
 Pull worker for `style: "ugc"` jobs on the Lines video API: presenter photo + presenter voice (ElevenLabs TTS) → lip-synced talking head (fal.ai OmniHuman 1.5) → burned-in captions (ffmpeg/libass) → upload.
 
@@ -29,7 +29,8 @@ Pull worker for `style: "ugc"` jobs on the Lines video API: presenter photo + pr
 - `script.text` is required (a `prompt` alone is rejected with 422). ElevenLabs audio tags such as `[excited]` are passed to the voice and stripped from the captions.
 - `format` is `9:16` only; `seconds` is `15` or `30`. If the spoken script runs longer than `seconds`, the job fails with `script_too_long` **before** the paid lip sync.
 - `voice` is always `"presenter"`: the voice belongs to the presenter.
-- `metadata.presenter` picks a presenter (default from `presenters.json`); `metadata.captions: "off"` skips the captions.
+- `metadata.presenter` picks a presenter (default from `presenters.json`); `metadata.captions: "off"` skips the spoken-word captions.
+- Every clip carries a small «مولّد بالذكاء الاصطناعي» / «AI-generated» label in the top corner for its whole length. It cannot be turned off: viewers must be able to tell the presenter is not a real person speaking.
 
 Failure codes: `script_required`, `script_too_long`, `presenter_unknown`, `presenter_language`, `vendor_not_configured`, `vendor_auth`, `tts_failed`, `lipsync_failed`, `render_timeout`, `cancelled`.
 

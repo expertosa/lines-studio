@@ -80,7 +80,7 @@ test('no script or unknown presenter fails without calling any vendor', { skip }
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('captions can be turned off; the vendor video is passed through', { skip }, async () => {
+test('captions can be turned off; the AI label is still burned in', { skip }, async () => {
   const { dir, media, presenters, tmpDir } = setup();
   const vendors = fakeVendors(media);
   const client = fakeClient();
@@ -88,6 +88,7 @@ test('captions can be turned off; the vendor video is passed through', { skip },
     client, presenters, tmpDir, elevenKey: 'k', falKey: 'k', fetchImpl: vendors.fetchImpl, sleep: async () => {},
   });
   assert.equal(result.status, 'succeeded');
-  assert.equal(client.calls.find((c) => c[0] === 'upload')[2], media.mp4.length);
+  // Re-encoded with the label, not the vendor file passed through.
+  assert.notEqual(client.calls.find((c) => c[0] === 'upload')[2], media.mp4.length);
   fs.rmSync(dir, { recursive: true, force: true });
 });

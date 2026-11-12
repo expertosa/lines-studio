@@ -10,6 +10,8 @@ import { createTemplateEngine } from './engines/template.js';
 import { openStore } from './store.js';
 import { applyBootstrap } from './bootstrap.js';
 import { installAppKey, installWorkerKey } from './keys.js';
+import { createAuthLimiter } from './auth-limit.js';
+import { createPresence } from './presence.js';
 
 function alive(pid) {
   try {
@@ -128,6 +130,12 @@ export async function createApp(options) {
     webhookTransport: options.webhookTransport || null,
     webhookPorts: options.webhookPorts || new Set([443]),
     log,
+    trustProxy: options.trustProxy === true || options.trustProxy === '1',
+    presence: createPresence(),
+    authFailures: createAuthLimiter({
+      limit: options.authFailLimit ?? 10,
+      windowMs: options.authFailWindowMs ?? 10 * 60 * 1000,
+    }),
     sweepExpired() {
       for (const artifact of store.expiredArtifacts(now())) {
         try {

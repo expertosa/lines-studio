@@ -12,7 +12,12 @@ ENV NEXT_PUBLIC_ANALYTICS_SRC=$NEXT_PUBLIC_ANALYTICS_SRC NEXT_PUBLIC_ANALYTICS_I
 RUN npm run build
 
 FROM nginx:alpine
+ARG NEXT_PUBLIC_ANALYTICS_SRC=""
+ENV NEXT_PUBLIC_ANALYTICS_SRC=$NEXT_PUBLIC_ANALYTICS_SRC
+COPY nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/40-analytics-csp.sh /docker-entrypoint.d/40-analytics-csp.sh
+RUN chmod +x /docker-entrypoint.d/40-analytics-csp.sh
 COPY --from=build /app/out /usr/share/nginx/html
 COPY public/404.html /usr/share/nginx/html/404.html
 EXPOSE 80

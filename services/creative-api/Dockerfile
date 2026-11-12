@@ -14,7 +14,8 @@ ENV NODE_ENV=production \
   LINES_PORT=8080 \
   LINES_DATA_DIR=/data \
   LINES_DEFAULT_ENGINE=moneyprinter \
-  LINES_ENABLE_TEMPLATE=1
+  LINES_ENABLE_TEMPLATE=1 \
+  LINES_TRUST_PROXY=1
 EXPOSE 8080
 VOLUME /data
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \

@@ -7,8 +7,8 @@
   --muted: #555555;
   --line: #e3e3de;
   --soft: #bdbdbd;
-  --display: 'Alexandria', 'Rubik', sans-serif;
-  --body: 'Rubik', system-ui, sans-serif;
+  --display: var(--font-display), 'Alexandria', sans-serif;
+  --body: var(--font-body), 'Rubik', system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -35,9 +35,11 @@ img { max-width: 100%; }
 
 /* header */
 .header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-block: 22px; }
-.logo { display: flex; align-items: center; gap: 12px; text-decoration: none; color: #fff; }
+.logo { display: flex; align-items: center; gap: 12px; text-decoration: none; color: #fff; flex: none; }
 .logo-mark { width: 44px; height: 44px; border-radius: 14px; background: var(--lime); color: var(--ink); transform: rotate(-8deg); display: grid; place-items: center; font-family: var(--display); font-weight: 900; font-size: 24px; }
-.logo-name { font-family: var(--display); font-weight: 800; font-size: 22px; }
+.logo-name { font-family: var(--display); font-weight: 800; font-size: 22px; white-space: nowrap; }
+.nav-toggle { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border-radius: 14px; border: 1px solid #3a3a3a; background: transparent; color: #fff; cursor: pointer; flex: none; }
+.nav-toggle:hover { color: var(--lime); border-color: var(--lime); }
 .nav { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; font-size: 16px; }
 .nav a { color: #fff; text-decoration: none; }
 .nav a:hover { color: var(--lime); }
@@ -171,10 +173,30 @@ img { max-width: 100%; }
   .work-mini { flex: initial; }
 }
 
+@media (max-width: 980px) {
+  .header { flex-wrap: nowrap; position: relative; }
+  .nav-toggle { display: inline-flex; }
+  .nav {
+    display: none;
+    position: absolute;
+    z-index: 30;
+    inset-inline: 0;
+    top: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 8px 4px 16px;
+    background: #111;
+    border-top: 1px solid #2a2a2a;
+  }
+  .nav.is-open { display: flex; }
+  .nav > a { padding-block: 10px; }
+  .nav .btn { width: 100%; }
+}
+
 @media (max-width: 640px) {
   .wrap { padding-inline: 20px; }
   .hero-art { height: 380px; transform: scale(.85); transform-origin: top center; }
-  .nav { gap: 14px; font-size: 15px; }
   .trial { padding: 40px 28px; }
   .pkg { padding: 28px; }
   .work-band { padding: 22px; border-radius: 28px; }

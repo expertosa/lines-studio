@@ -27,6 +27,10 @@ test('health is public and responses carry no CORS header', async () => {
     assert.equal(health.json.ok, true);
     assert.equal(health.json.service, 'lines-video-api');
     assert.equal(health.json.engines.external.configured, false);
+    assert.equal(health.json.engines.moneyprinter.ready, false);
+    assert.equal(health.json.engines.moneyprinter.worker, 'offline');
+    assert.equal(health.json.engines.moneyprinter.mode, 'pull');
+    assert.equal(health.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains');
     assert.equal(health.headers.get('access-control-allow-origin'), null);
     const options = await api(ctx.app, 'OPTIONS', '/v1/jobs');
     assert.equal(options.status, 404);

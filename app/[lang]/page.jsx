@@ -25,7 +25,7 @@ export default async function Home({ params }) {
   return (
     <>
       <Header lang={lang} />
-
+      <main>
       <section className="dark">
         <div className="wrap hero">
           <div className="hero-copy">
@@ -177,6 +177,7 @@ export default async function Home({ params }) {
           <a className="btn btn-ink" href={wa} data-umami-event="whatsapp" data-umami-event-place="trial">{d.trial.cta}</a>
         </div>
       </section>
+      </main>
 
       <Footer lang={lang} />
     </>

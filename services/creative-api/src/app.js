@@ -11,55 +11,8 @@ import { openStore } from './store.js';
 import { applyBootstrap } from './bootstrap.js';
 import { installAppKey, installWorkerKey } from './keys.js';
 import { createAuthLimiter } from './auth-limit.js';
+import { acquireInstanceLock } from './instance-lock.js';
 import { createPresence } from './presence.js';
-
-function alive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === 'EPERM';
-  }
-}
-
-function acquireLock(dir) {
-  const lockPath = path.join(dir, 'worker.lock');
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const fd = fs.openSync(lockPath, 'wx');
-      fs.writeFileSync(fd, String(process.pid));
-      fs.closeSync(fd);
-      return () => {
-        try {
-          if (fs.readFileSync(lockPath, 'utf8').trim() === String(process.pid)) fs.rmSync(lockPath, { force: true });
-        } catch {
-          // The lock is already gone.
-        }
-      };
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      let pid = 0;
-      try {
-        pid = Number(fs.readFileSync(lockPath, 'utf8'));
-      } catch {
-        pid = 0;
-      }
-      if (pid && alive(pid)) {
-        const busy = new Error('api_already_running');
-        busy.code = 'api_already_running';
-        throw busy;
-      }
-      try {
-        fs.rmSync(lockPath, { force: true });
-      } catch {
-        // Another process removed it first.
-      }
-    }
-  }
-  const busy = new Error('api_already_running');
-  busy.code = 'api_already_running';
-  throw busy;
-}
 
 function walkFiles(dir, visit) {
   if (!fs.existsSync(dir)) return;
@@ -90,7 +43,14 @@ export async function createApp(options) {
   fs.mkdirSync(options.dataDir, { recursive: true });
   const tmpDir = path.join(options.dataDir, 'tmp');
   fs.mkdirSync(tmpDir, { recursive: true });
-  const releaseLock = acquireLock(options.dataDir);
+  const instanceLock = await acquireInstanceLock(options.dataDir, {
+    waitMs: options.lockWaitMs,
+    pollMs: options.lockPollMs,
+    ttlMs: options.lockTtlMs,
+    heartbeatMs: options.lockHeartbeatMs,
+    hostname: options.lockHostname,
+  });
+  const releaseLock = () => instanceLock.release();
   const now = options.now || (() => Date.now());
   const limits = resolveLimits(options.limits);
   let store;
@@ -131,6 +91,7 @@ export async function createApp(options) {
     webhookPorts: options.webhookPorts || new Set([443]),
     log,
     trustProxy: options.trustProxy === true || options.trustProxy === '1',
+    trustedProxies: Array.isArray(options.trustedProxies) ? options.trustedProxies : undefined,
     presence: createPresence(),
     authFailures: createAuthLimiter({
       limit: options.authFailLimit ?? 10,
@@ -177,7 +138,29 @@ export async function createApp(options) {
     throw error;
   }
   const address = server.address();
-  let closed = false;
+  let closing = null;
+  async function close() {
+    if (closing) return closing;
+    closing = (async () => {
+      try {
+        await worker.stop();
+        await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+        try {
+          store.close();
+        } catch {
+          // Already closed.
+        }
+      } finally {
+        releaseLock();
+      }
+    })();
+    return closing;
+  }
+  instanceLock.watch(() => {
+    void close().finally(() => {
+      if (typeof options.onHandoff === 'function') options.onHandoff();
+    });
+  });
   return {
     url: `http://127.0.0.1:${address.port}`,
     port: address.port,
@@ -187,13 +170,6 @@ export async function createApp(options) {
     async tick() {
       return worker.tick();
     },
-    async close() {
-      if (closed) return;
-      closed = true;
-      await worker.stop();
-      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-      store.close();
-      releaseLock();
-    },
+    close,
   };
 }

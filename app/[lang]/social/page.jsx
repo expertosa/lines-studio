@@ -19,7 +19,7 @@ export default async function Social({ params }) {
   return (
     <>
       <Header lang={lang} path="social/" />
-
+      <main>
       <section className="dark">
         <div className="wrap section social-hero">
           <span className="pill">{c.badge}</span>
@@ -74,6 +74,7 @@ export default async function Social({ params }) {
           <a className="btn btn-ink" href={wa} data-umami-event="whatsapp" data-umami-event-place="social-end">{c.endC}</a>
         </div>
       </section>
+      </main>
 
       <Footer lang={lang} />
     </>

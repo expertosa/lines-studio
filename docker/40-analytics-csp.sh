@@ -1,6 +1,6 @@
 #!/bin/sh
 # Append the build-time analytics origin to script-src and connect-src.
-# Empty NEXT_PUBLIC_ANALYTICS_SRC leaves the CSP same-origin only.
+# Empty NEXT_PUBLIC_ANALYTICS_SRC leaves Cloudflare Web Analytics and same-origin.
 set -eu
 CONF=/etc/nginx/snippets/security-headers.conf
 SRC=${NEXT_PUBLIC_ANALYTICS_SRC:-}

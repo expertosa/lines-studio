@@ -70,8 +70,14 @@ export async function createTestApp(overrides = {}) {
       { id: 'mac-mini', token: WORKER_TOKEN, engines: ['moneyprinter'] },
     ],
     trustProxy: overrides.trustProxy,
+    trustedProxies: overrides.trustedProxies,
     authFailLimit: overrides.authFailLimit,
     authFailWindowMs: overrides.authFailWindowMs,
+    lockWaitMs: overrides.lockWaitMs,
+    lockPollMs: overrides.lockPollMs,
+    lockTtlMs: overrides.lockTtlMs,
+    lockHeartbeatMs: overrides.lockHeartbeatMs,
+    lockHostname: overrides.lockHostname,
     webhookLookup: overrides.webhookLookup || (async () => ['8.8.8.8']),
     webhookTransport: overrides.webhookTransport || (async (request) => {
       calls.push(request);

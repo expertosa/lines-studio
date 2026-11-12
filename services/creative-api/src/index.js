@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createApp } from './app.js';
+import { parseTrustedProxies } from './auth-limit.js';
 import { parseBootstrap } from './bootstrap.js';
 import { resolveLimits } from './limits.js';
 
@@ -60,6 +61,13 @@ try {
   fail('bootstrap', error.message);
 }
 
+let trustedProxies;
+try {
+  trustedProxies = parseTrustedProxies(process.env.LINES_TRUSTED_PROXIES);
+} catch (error) {
+  fail('config', error.message);
+}
+
 const ports = (process.env.LINES_WEBHOOK_PORTS || '443')
   .split(',')
   .map((item) => Number(item.trim()))
@@ -86,6 +94,7 @@ try {
     bootstrap,
     webhookPorts: new Set(ports.length ? ports : [443]),
     trustProxy: process.env.LINES_TRUST_PROXY === '1',
+    trustedProxies,
   });
 } catch (error) {
   fail('boot', error.message);

@@ -120,7 +120,40 @@ test('failed-auth limits are per forwarded IP only when the proxy is trusted', a
   }
 });
 
-test('client IP uses the proxy headers only when asked', () => {
+test('failed-auth IPv6 /64 buckets follow proxy headers only from a trusted peer', async () => {
+  const ctx = await createTestApp({ authFailLimit: 2, trustProxy: true });
+  try {
+    const headers = (ip) => ({ 'cf-connecting-ip': ip });
+    const sameA = await api(ctx.app, 'GET', '/v1/styles', { token: BAD, headers: headers('2001:db8:85a3:10::1') });
+    const sameB = await api(ctx.app, 'GET', '/v1/styles', { token: BAD, headers: headers('2001:0db8:85a3:0010::abcd') });
+    const other = await api(ctx.app, 'GET', '/v1/styles', { token: BAD, headers: headers('2001:db8:85a3:11::1') });
+    assert.equal(sameA.status, 401);
+    assert.equal(sameB.status, 429);
+    assert.equal(other.status, 401);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('spoofed forwarding headers do not split the failed-auth bucket', async () => {
+  const ctx = await createTestApp({ authFailLimit: 2, trustProxy: false });
+  try {
+    const first = await api(ctx.app, 'GET', '/v1/styles', {
+      token: BAD,
+      headers: { 'cf-connecting-ip': '2001:db8::1', 'x-forwarded-for': '203.0.113.10' },
+    });
+    const second = await api(ctx.app, 'GET', '/v1/styles', {
+      token: BAD,
+      headers: { 'cf-connecting-ip': '2001:db8::2', 'x-forwarded-for': '203.0.113.11' },
+    });
+    assert.equal(first.status, 401);
+    assert.equal(second.status, 429);
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('client IP uses the proxy headers only when the peer is trusted', () => {
   const req = {
     socket: { remoteAddress: '10.0.0.8' },
     headers: {

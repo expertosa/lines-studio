@@ -43,7 +43,7 @@ Each tenant has its own webhook secret, used only to sign callbacks.
 
 Every response sends `Strict-Transport-Security: max-age=31536000; includeSubDomains`.
 
-A **401** is counted per client IP. After 10 failures in 10 minutes, later requests from that IP get **429** `rate_limited` with `Retry-After`, except `GET /v1/health`. With `LINES_TRUST_PROXY=1` (set in the API image, for Coolify) the address is `CF-Connecting-IP`, then `X-Real-IP`, then the last `X-Forwarded-For` hop. Leave the flag off unless the process is reachable only through that proxy.
+A **401** is counted per client network. IPv4 addresses are counted one by one. IPv6 addresses in the same /64 share one bucket, so rotating the interface id does not reset the limit. After 10 failures in 10 minutes, later requests from that network get **429** `rate_limited` with `Retry-After`, except `GET /v1/health`. Forwarded headers are read only when `LINES_TRUST_PROXY=1` and the TCP peer is a trusted proxy: loopback, link-local, CGNAT, or private by default, or an address in `LINES_TRUSTED_PROXIES` when that list is set (the list replaces the private ranges). The client address is then `CF-Connecting-IP`, then `X-Real-IP`, then the last `X-Forwarded-For` hop. A public peer cannot supply those headers. Leave `LINES_TRUST_PROXY` off unless the process is reachable only through the proxy.
 
 `POST /v1/jobs` returns **202** `{ "id", "status": "queued" }`. The same idempotency key and body replay that job (header `Idempotency-Replayed: true`) and do not spend another quota slot. A different body with the same key is **409**.
 
@@ -100,6 +100,12 @@ The in-process template worker only claims `engine: "template"`. MoneyPrinter jo
 `style: "promo3d"` (engine `blender`) is a procedural 3D promo rendered by Blender on the Mac. It is listed only when `LINES_ENABLE_BLENDER=1`, and only a worker key with `--engines blender` can claim it. Optional `metadata`: `hero` (`phone`, `laptop`, `orb`), `heroAsset` (a file name in the worker's assets folder), `palette` (`#bg,#primary,#accent[,#text]`), `brand`, `cta`. See `services/blender-3d-promo/README.md`.
 
 `style: "ugc"` (engine `ugc`) is a selfie-style testimonial: a fixed presenter speaks `script.text` (required) with lip sync. It is listed only when `LINES_ENABLE_UGC=1` and claimed by a worker key with `--engines ugc`. Format `9:16` only, `seconds` 15 or 30, `voice` is always `"presenter"`, `metadata.presenter` picks the presenter. The worker makes paid vendor calls (ElevenLabs, fal.ai); this API still makes none. See `services/ugc-worker/README.md`.
+
+## Single instance
+
+The data directory has one writer. The process holds a SQLite reserved lock on `worker.lock` and a heartbeat in `worker.leader.json` (hostname, pid, timestamp). The kernel releases the lock when the process dies, including SIGKILL, so a new container is not blocked by a file that says PID 1 (that pid is alive inside every container). A leftover text lock from the previous build is ignored once it is older than 15 seconds.
+
+On a rolling update the new container writes `worker.handoff` and waits up to 45 seconds instead of exiting with `api_already_running`. The running process closes the database, releases the lock, and stops listening. It stays up until Coolify sends SIGTERM, so a restart policy does not boot a second writer. The new process opens the database only after the lock is free. The Docker healthcheck start period is 60 seconds so the wait can finish.
 
 ## Keys
 
@@ -161,7 +167,8 @@ Set these on the Coolify app. Do not commit values.
 | `LINES_JOB_DEADLINE_MS` | Default 2 hours. |
 | `LINES_ARTIFACT_TTL_MS` | Default 14 days. |
 | `LINES_LEASE_MS` | Worker lease. Default 120000. A moneyprinter worker is `online` for twice this long after a claim or heartbeat. |
-| `LINES_TRUST_PROXY` | `1` in Docker. Trust `CF-Connecting-IP` / `X-Real-IP` / `X-Forwarded-For` for the failed-auth limit. |
+| `LINES_TRUST_PROXY` | `1` in Docker. Read `CF-Connecting-IP` / `X-Real-IP` / `X-Forwarded-For` only when the TCP peer is a trusted proxy. |
+| `LINES_TRUSTED_PROXIES` | Optional comma-separated IPs or CIDRs. When set, only these peers are trusted (private ranges are not implied). |
 | `LINES_MAX_ATTEMPTS` | Default 2. |
 | `LINES_WEBHOOK_TIMEOUT_MS` | Default 8000. |
 | `LINES_WEBHOOK_MAX_ATTEMPTS` | Default 8. |

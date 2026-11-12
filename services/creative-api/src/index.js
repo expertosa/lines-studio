@@ -85,6 +85,7 @@ try {
     limits,
     bootstrap,
     webhookPorts: new Set(ports.length ? ports : [443]),
+    trustProxy: process.env.LINES_TRUST_PROXY === '1',
   });
 } catch (error) {
   fail('boot', error.message);

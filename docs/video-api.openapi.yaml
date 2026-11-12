@@ -22,7 +22,7 @@ paths:
       summary: Process health
       responses:
         "200":
-          description: The process is up. moneyprinter.ready means the API can queue, not that the Mac is online.
+          description: The process is up. ok stays true when no worker is connected. moneyprinter.ready is true only after a moneyprinter worker claims or heartbeats within twice the lease. moneyprinter.worker is online or offline.
           content:
             application/json:
               schema:

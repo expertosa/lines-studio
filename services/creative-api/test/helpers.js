@@ -69,6 +69,9 @@ export async function createTestApp(overrides = {}) {
     workerKeys: overrides.workerKeys || [
       { id: 'mac-mini', token: WORKER_TOKEN, engines: ['moneyprinter'] },
     ],
+    trustProxy: overrides.trustProxy,
+    authFailLimit: overrides.authFailLimit,
+    authFailWindowMs: overrides.authFailWindowMs,
     webhookLookup: overrides.webhookLookup || (async () => ['8.8.8.8']),
     webhookTransport: overrides.webhookTransport || (async (request) => {
       calls.push(request);

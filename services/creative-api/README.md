@@ -39,6 +39,12 @@ Each tenant has its own webhook secret, used only to sign callbacks.
 | POST | `/v1/worker/jobs/:id/complete` | `worker:run` |
 | POST | `/v1/worker/jobs/:id/fail` | `worker:run` |
 
+`GET /v1/health` stays **200** with `ok: true` while the process is up, including when no Mac is connected (the Docker healthcheck uses this). `engines.moneyprinter.ready` is true only when a worker whose engines include `moneyprinter` has successfully called `/v1/worker/claim` or a worker heartbeat within `2 * LINES_LEASE_MS`. `engines.moneyprinter.worker` is `online` or `offline`. The timestamp is in memory, so a restart looks offline until the next poll (the Mac worker polls every few seconds).
+
+Every response sends `Strict-Transport-Security: max-age=31536000; includeSubDomains`.
+
+A **401** is counted per client IP. After 10 failures in 10 minutes, later requests from that IP get **429** `rate_limited` with `Retry-After`, except `GET /v1/health`. With `LINES_TRUST_PROXY=1` (set in the API image, for Coolify) the address is `CF-Connecting-IP`, then `X-Real-IP`, then the last `X-Forwarded-For` hop. Leave the flag off unless the process is reachable only through that proxy.
+
 `POST /v1/jobs` returns **202** `{ "id", "status": "queued" }`. The same idempotency key and body replay that job (header `Idempotency-Replayed: true`) and do not spend another quota slot. A different body with the same key is **409**.
 
 Create body:
@@ -154,7 +160,8 @@ Set these on the Coolify app. Do not commit values.
 | `LINES_MAX_CONCURRENCY` | Renders at once. Default 1. Hard max 8. |
 | `LINES_JOB_DEADLINE_MS` | Default 2 hours. |
 | `LINES_ARTIFACT_TTL_MS` | Default 14 days. |
-| `LINES_LEASE_MS` | Worker lease. Default 120000. |
+| `LINES_LEASE_MS` | Worker lease. Default 120000. A moneyprinter worker is `online` for twice this long after a claim or heartbeat. |
+| `LINES_TRUST_PROXY` | `1` in Docker. Trust `CF-Connecting-IP` / `X-Real-IP` / `X-Forwarded-For` for the failed-auth limit. |
 | `LINES_MAX_ATTEMPTS` | Default 2. |
 | `LINES_WEBHOOK_TIMEOUT_MS` | Default 8000. |
 | `LINES_WEBHOOK_MAX_ATTEMPTS` | Default 8. |

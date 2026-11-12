@@ -12,8 +12,10 @@ import { listStyles } from './styles.js';
 import { blenderEngine } from './engines/blender.js';
 import { ugcEngine } from './engines/ugc.js';
 import { validateJob } from './validate.js';
+import { clientIp } from './auth-limit.js';
 
 const JOB_ID = '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+const HSTS = 'max-age=31536000; includeSubDomains';
 
 function send(res, status, body, extra = {}) {
   const payload = JSON.stringify(body);
@@ -23,6 +25,7 @@ function send(res, status, body, extra = {}) {
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
+    'strict-transport-security': HSTS,
     ...extra,
   };
   if (extra['retry-after'] == null && body?.error?.retryAfter) {
@@ -154,15 +157,26 @@ function decodeCursor(value) {
   return { id: parsed.id, createdAt: parsed.t };
 }
 
+function moneyprinterReady(ctx) {
+  const windowMs = ctx.limits.leaseMs * 2;
+  return ctx.presence.online('moneyprinter', ctx.now(), windowMs);
+}
+
 async function health(req, res, ctx) {
   const templateReady = Boolean(ctx.enableTemplate && ctx.template?.ready);
+  const workerOnline = moneyprinterReady(ctx);
   send(res, 200, {
     ok: true,
     service: 'lines-video-api',
     defaultEngine: ctx.defaultEngine,
     engines: {
       template: { enabled: ctx.enableTemplate, ready: templateReady, mode: 'local' },
-      moneyprinter: { mode: 'pull', ready: true, macRequired: true },
+      moneyprinter: {
+        mode: 'pull',
+        ready: workerOnline,
+        worker: workerOnline ? 'online' : 'offline',
+        macRequired: true,
+      },
       blender: { enabled: Boolean(ctx.enableBlender), mode: blenderEngine.mode, macRequired: blenderEngine.macRequired },
       ugc: { enabled: Boolean(ctx.enableUgc), mode: ugcEngine.mode, paidCalls: ugcEngine.paidCalls },
       external: { configured: false },
@@ -382,6 +396,8 @@ async function downloadArtifact(req, res, ctx, jobId, artifactId) {
       'content-range': `bytes */${size}`,
       'accept-ranges': 'bytes',
       'cache-control': 'private, no-store',
+      'x-content-type-options': 'nosniff',
+      'strict-transport-security': HSTS,
     });
     res.end();
     return;
@@ -397,6 +413,7 @@ async function downloadArtifact(req, res, ctx, jobId, artifactId) {
     etag: `"${artifact.sha256}"`,
     'content-disposition': `attachment; filename="lines-${artifact.id}.${artifact.mime === 'video/mp4' ? 'mp4' : 'img'}"`,
     'x-content-type-options': 'nosniff',
+    'strict-transport-security': HSTS,
     'cache-control': 'private, no-store',
   });
   if (req.method === 'HEAD') {
@@ -406,8 +423,13 @@ async function downloadArtifact(req, res, ctx, jobId, artifactId) {
   fs.createReadStream(filePath, { start: range.start, end: range.end }).pipe(res);
 }
 
+function seenWorker(ctx, worker) {
+  ctx.presence.note(worker.keyId, worker.engines, ctx.now());
+}
+
 async function workerClaim(req, res, ctx) {
   const worker = assertWorker(req, ctx.store);
+  seenWorker(ctx, worker);
   if (!worker.engines?.length) throw new ApiError(403, 'forbidden', 'This worker has no engines.');
   await readJson(req, 2048, { required: false });
   const claimed = ctx.store.claimNext({
@@ -428,6 +450,7 @@ async function workerClaim(req, res, ctx) {
 
 async function workerHeartbeat(req, res, ctx, id) {
   const worker = assertWorker(req, ctx.store);
+  seenWorker(ctx, worker);
   await readJson(req, 2048, { required: false });
   const result = ctx.store.heartbeat(id, worker.keyId, ctx.limits.leaseMs);
   if (result.mismatch || result.expired) throw new ApiError(409, 'lease_mismatch', 'This worker does not hold the lease.');
@@ -439,6 +462,7 @@ async function workerHeartbeat(req, res, ctx, id) {
 
 async function workerArtifact(req, res, ctx, id) {
   const worker = assertWorker(req, ctx.store);
+  seenWorker(ctx, worker);
   const job = ctx.store.readJob(id);
   if (!job || job.status !== 'running' || job.leaseOwner !== worker.keyId) {
     req.resume();
@@ -491,6 +515,7 @@ const FAIL_CODES = new Set(['render_failed', 'render_timeout', 'provider_unavail
 
 async function workerComplete(req, res, ctx, id) {
   const worker = assertWorker(req, ctx.store);
+  seenWorker(ctx, worker);
   await readJson(req, 2048, { required: false });
   const result = ctx.store.complete(id, worker.keyId);
   if (result.mismatch) throw new ApiError(409, 'lease_mismatch', 'This worker does not hold the lease.');
@@ -500,6 +525,7 @@ async function workerComplete(req, res, ctx, id) {
 
 async function workerFail(req, res, ctx, id) {
   const worker = assertWorker(req, ctx.store);
+  seenWorker(ctx, worker);
   const body = await readJson(req, 4096);
   const code = FAIL_CODES.has(body.code) ? body.code : 'render_failed';
   const message = typeof body.message === 'string' ? body.message.replace(/https?:\/\/\S+/gi, '[url]').slice(0, 300) : 'Render failed.';
@@ -535,6 +561,14 @@ export function createHandler(ctx) {
         return;
       }
       const url = pathname(req);
+      if (url.pathname !== '/v1/health') {
+        const blocked = ctx.authFailures.check(clientIp(req, ctx.trustProxy), ctx.now());
+        if (blocked) {
+          if (!req.readableEnded) req.resume();
+          fail(res, new ApiError(429, 'rate_limited', 'Too many failed authentication attempts.', undefined, { retryAfter: blocked.retryAfter }));
+          return;
+        }
+      }
       const route = ROUTES.find((item) => item.method === req.method && item.re.test(url.pathname));
       if (!route) {
         req.resume();
@@ -549,6 +583,13 @@ export function createHandler(ctx) {
         return;
       }
       if (!req.readableEnded) req.resume();
+      if (error instanceof ApiError && error.status === 401) {
+        const hit = ctx.authFailures.record(clientIp(req, ctx.trustProxy), ctx.now());
+        if (hit.limited) {
+          fail(res, new ApiError(429, 'rate_limited', 'Too many failed authentication attempts.', undefined, { retryAfter: hit.retryAfter }));
+          return;
+        }
+      }
       if (error instanceof ApiError) {
         fail(res, error);
         return;

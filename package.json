@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && cp public/404.html out/404.html",
     "start": "npx serve out",
     "test": "npm test --prefix services/creative-api && npm test --prefix services/mac-video-worker && npm test --prefix services/blender-3d-promo && npm test --prefix services/ugc-worker && npm test --prefix services/social-content",
     "lint": "npm run lint --prefix services/creative-api && npm run lint --prefix services/mac-video-worker && npm run lint --prefix services/blender-3d-promo && npm run lint --prefix services/ugc-worker && npm run lint --prefix services/social-content",

@@ -1,8 +1,6 @@
 import Link from 'next/link';
-import LangSwitch from './LangSwitch';
+import SiteNav from './SiteNav';
 import { t } from '../lib/dict';
-import { site } from '../lib/site';
-import { socialCopy } from '../lib/social';
 import { launchOffer, offerActive } from '../lib/promo';
 
 export default function Header({ lang, path = '' }) {
@@ -28,17 +26,7 @@ export default function Header({ lang, path = '' }) {
           </span>
           <span className="logo-name">{d.brand}</span>
         </Link>
-        <nav className="nav" aria-label={lang === 'ar' ? 'القائمة الرئيسية' : 'Main menu'}>
-          <Link href={`/${lang}/gallery/`}>{d.nav.gallery}</Link>
-          <Link href={`/${lang}/work/`}>{d.nav.work}</Link>
-          <Link href={`/${lang}/#packages`}>{d.nav.packages}</Link>
-          <Link href={`/${lang}/#video`}>{d.nav.video}</Link>
-          <Link href={`/${lang}/social/`}>{(socialCopy[lang] || socialCopy.ar).nav}</Link>
-          <Link href={`/${lang}/#how`}>{d.nav.how}</Link>
-          <Link href={`/${lang}/mcp/`}>{d.nav.mcp}</Link>
-          <LangSwitch lang={lang} path={path} label={d.nav.lang} />
-          <a className="btn btn-white" href={`https://wa.me/${site.whatsapp}`} data-umami-event="whatsapp" data-umami-event-place="header">{d.nav.talk}</a>
-        </nav>
+        <SiteNav lang={lang} path={path} />
       </header>
     </div>
   );

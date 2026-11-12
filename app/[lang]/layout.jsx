@@ -1,6 +1,23 @@
+import { Alexandria, Rubik } from 'next/font/google';
 import '../globals.css';
 import { languages, site } from '../../lib/site';
-import { siteUrl } from '../../lib/seo';
+import { organizationJsonLd, siteUrl } from '../../lib/seo';
+
+const alexandria = Alexandria({
+  subsets: ['arabic', 'latin'],
+  weight: ['500', '700', '800', '900'],
+  display: 'swap',
+  variable: '--font-display',
+});
+
+const rubik = Rubik({
+  subsets: ['arabic', 'latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-body',
+});
+
+const jsonLd = JSON.stringify(organizationJsonLd()).replace(/</g, '\\u003c');
 
 export const dynamicParams = false;
 
@@ -10,6 +27,7 @@ export function generateStaticParams() {
 
 export const metadata = {
   metadataBase: new URL(siteUrl),
+  manifest: '/manifest.webmanifest',
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },
@@ -20,20 +38,19 @@ export const metadata = {
   },
 };
 
+export const viewport = {
+  themeColor: '#111111',
+};
+
 export default async function RootLayout({ children, params }) {
   const { lang } = await params;
   return (
-    <html lang={lang} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <html lang={lang} dir={lang === 'ar' ? 'rtl' : 'ltr'} className={`${alexandria.variable} ${rubik.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Alexandria:wght@500;700;800;900&family=Rubik:wght@400;500;600;700&display=swap"
-        />
         {site.analytics.src && site.analytics.websiteId && (
           <script defer src={site.analytics.src} data-website-id={site.analytics.websiteId} data-domains={site.domain} data-do-not-track="true" />
         )}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
       </head>
       <body>{children}</body>
     </html>

@@ -20,6 +20,7 @@ function readJson(file) {
 }
 
 function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(value));
   fs.renameSync(tmp, file);
@@ -42,6 +43,27 @@ function isBusy(error) {
 
 function isNotDatabase(error) {
   return error?.errcode === 26 || /not a database/i.test(String(error?.message || ''));
+}
+
+function safeHost(hostname) {
+  const safe = String(hostname || 'host').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
+  return safe || 'host';
+}
+
+export function bootFileFor(hostname, bootFile) {
+  if (bootFile) return bootFile;
+  return path.join(os.tmpdir(), 'lines-creative-api-boot', `${safeHost(hostname)}.json`);
+}
+
+// One id per container filesystem. A new container gets a new file; a process
+// restarted inside the same container reads the id it already wrote.
+export function ensureBootId(file) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const existing = readJson(file);
+  if (existing && typeof existing.id === 'string' && existing.id) return existing.id;
+  const id = randomUUID();
+  writeJson(file, { id, at: Date.now() });
+  return id;
 }
 
 function legacyState(lockPath, ttlMs, now) {
@@ -105,6 +127,55 @@ function hold(lockPath, record) {
   }
 }
 
+function freshBeat(beat, current, ttlMs) {
+  return typeof beat === 'number' && Number.isFinite(beat) && beat <= current + 1000 && current - beat < ttlMs;
+}
+
+function yieldPathFor(dir) {
+  return path.join(dir, 'worker.yielded.json');
+}
+
+export function bootHasYielded(dir, bootId) {
+  const value = readJson(yieldPathFor(dir));
+  return Boolean(value && value.bootId === bootId);
+}
+
+/**
+ * True when some other process has a fresh handoff request or leader record.
+ * Used after we have already given the lock away.
+ */
+export function anotherHolderIsActive(dir, self, options = {}) {
+  const now = options.now || Date.now;
+  const ttlMs = options.ttlMs ?? LOCK_TTL_MS;
+  const current = now();
+  const handoff = readJson(path.join(dir, 'worker.handoff'));
+  const leader = readJson(path.join(dir, 'worker.leader.json'));
+  if (handoff && handoff.id !== self?.id && freshBeat(handoff.beat, current, ttlMs)) return true;
+  if (leader && leader.id !== self?.id && freshBeat(leader.beat, current, ttlMs)) return true;
+  return false;
+}
+
+/**
+ * Stay in the caller until the successor has been gone for a full TTL, or stop.
+ * One empty observation is not enough: the successor deletes its handoff file
+ * a moment before it writes the leader record.
+ */
+export async function waitForSuccessorExit(dir, self, options = {}) {
+  const now = options.now || Date.now;
+  const sleep = options.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const ttlMs = options.ttlMs ?? LOCK_TTL_MS;
+  const pollMs = options.pollMs ?? LOCK_POLL_MS;
+  const shouldStop = options.shouldStop || (() => false);
+  let quietSince = null;
+  while (!shouldStop()) {
+    if (anotherHolderIsActive(dir, self, { now, ttlMs })) quietSince = null;
+    else if (quietSince == null) quietSince = now();
+    else if (now() - quietSince >= ttlMs) return 'resume';
+    await sleep(pollMs);
+  }
+  return 'stop';
+}
+
 /**
  * One writer for the shared data directory.
  * The mutex is a SQLite reserved lock on worker.lock. The kernel drops it when
@@ -112,7 +183,9 @@ function hold(lockPath, record) {
  * (that pid is alive inside every container). A previous build stored only the
  * pid in this file; that text is ignored once it is older than the TTL.
  * While the lock is busy the waiter writes worker.handoff. The holder closes
- * the database and releases the lock so a rolling update does not overlap writers.
+ * the database and releases the lock. It records worker.yielded.json tied to
+ * this container's boot id so a restart policy cannot take the lock back while
+ * the successor is still waiting or leading.
  */
 export async function acquireInstanceLock(dir, options = {}) {
   fs.mkdirSync(dir, { recursive: true });
@@ -122,21 +195,76 @@ export async function acquireInstanceLock(dir, options = {}) {
   const pollMs = options.pollMs ?? LOCK_POLL_MS;
   const ttlMs = options.ttlMs ?? LOCK_TTL_MS;
   const heartbeatMs = options.heartbeatMs ?? LOCK_HEARTBEAT_MS;
+  const handoffEvery = options.handoffPollMs ?? Math.min(heartbeatMs, LOCK_POLL_MS);
   const hostname = options.hostname || os.hostname();
   const id = options.id || randomUUID();
+  const bootFile = bootFileFor(hostname, options.bootFile);
+  const bootId = options.bootId || ensureBootId(bootFile);
   const log = options.log || ((fields) => {
     console.error(JSON.stringify({ level: 'info', time: new Date().toISOString(), ...fields }));
   });
   const lockPath = path.join(dir, 'worker.lock');
   const handoffPath = path.join(dir, 'worker.handoff');
   const leaderPath = path.join(dir, 'worker.leader.json');
-  const started = now();
+  const yieldPath = yieldPathFor(dir);
+  const startedAt = options.startedAt ?? now();
+  const graceMs = Math.max(pollMs * 2, 1000);
   const maxSpins = Math.max(1, Math.ceil(waitMs / Math.max(pollMs, 1))) + 2;
   let spins = 0;
   let loggedWait = false;
+  let loggedDefer = false;
+  let passive = false;
+  let passiveQuietSince = null;
   let db = null;
 
+  function foreignFresh(file) {
+    const value = readJson(file);
+    if (!value || value.id === id || !freshBeat(value.beat, now(), ttlMs)) return null;
+    return value;
+  }
+
+  function yieldedAlready() {
+    const value = readJson(yieldPath);
+    return Boolean(value && value.bootId === bootId);
+  }
+
   while (db == null) {
+    if (typeof options.shouldStop === 'function' && options.shouldStop()) {
+      const stopped = new Error('lock_stopped');
+      stopped.code = 'lock_stopped';
+      throw stopped;
+    }
+    const handoff = foreignFresh(handoffPath);
+    const leader = foreignFresh(leaderPath);
+    // A handoff refreshed at or after this process started belongs to a
+    // successor that is already waiting. Do not take a free lock out from
+    // under it, and do not overwrite its marker. Once this boot has yielded,
+    // stay passive for as long as any successor is in charge, even if a later
+    // handoff replaces worker.yielded.json.
+    if (handoff && handoff.beat >= startedAt - graceMs) passive = true;
+    if (yieldedAlready() && (handoff || leader)) passive = true;
+    const successorInCharge = Boolean(handoff || leader);
+    if (passive && successorInCharge) {
+      passiveQuietSince = null;
+      if (!loggedDefer) {
+        loggedDefer = true;
+        log({ code: 'lock_defer', hostname });
+      }
+      if (typeof options.onDefer === 'function') options.onDefer();
+      await sleep(pollMs);
+      continue;
+    }
+    if (passive) {
+      if (passiveQuietSince == null) passiveQuietSince = now();
+      if (now() - passiveQuietSince < ttlMs) {
+        if (typeof options.onDefer === 'function') options.onDefer();
+        await sleep(pollMs);
+        continue;
+      }
+      passive = false;
+      passiveQuietSince = null;
+    }
+
     const legacy = legacyState(lockPath, ttlMs, now);
     if (legacy === 'stale-legacy') retireLegacy(lockPath);
     if (legacy !== 'fresh-legacy') {
@@ -148,13 +276,19 @@ export async function acquireInstanceLock(dir, options = {}) {
       }
     }
     if (db) break;
+    if (passive) {
+      if (typeof options.onDefer === 'function') options.onDefer();
+      await sleep(pollMs);
+      continue;
+    }
+    if (typeof options.onWait === 'function') options.onWait();
     if (!loggedWait) {
       loggedWait = true;
       log({ code: 'lock_wait', hostname });
     }
     writeJson(handoffPath, { id, hostname, beat: now() });
     spins += 1;
-    if (now() - started >= waitMs || spins > maxSpins) {
+    if (now() - startedAt >= waitMs || spins > maxSpins) {
       removeIfId(handoffPath, id);
       const busy = new Error('api_already_running');
       busy.code = 'api_already_running';
@@ -163,6 +297,8 @@ export async function acquireInstanceLock(dir, options = {}) {
     await sleep(pollMs);
   }
 
+  const yielded = readJson(yieldPath);
+  if (yielded && yielded.bootId === bootId) fs.rmSync(yieldPath, { force: true });
   fs.rmSync(handoffPath, { force: true });
   fs.rmSync(`${lockPath}.legacy`, { force: true });
   const record = () => ({ id, hostname, pid: process.pid, beat: now() });
@@ -171,6 +307,7 @@ export async function acquireInstanceLock(dir, options = {}) {
   let released = false;
   let timer = null;
   let handoffHandler = null;
+  let lastLeaderWrite = 0;
 
   function release() {
     if (released) return;
@@ -195,18 +332,29 @@ export async function acquireInstanceLock(dir, options = {}) {
     removeIfId(handoffPath, id);
   }
 
+  function markYielded() {
+    try {
+      writeJson(yieldPath, { bootId, hostname, id, at: now() });
+    } catch {
+      // Releasing the lock still has to happen.
+    }
+  }
+
   function tick() {
     if (released) return;
     const beat = now();
-    try {
-      writeJson(leaderPath, { id, hostname, pid: process.pid, beat });
-    } catch {
-      // The directory can disappear during shutdown.
+    if (lastLeaderWrite === 0 || beat - lastLeaderWrite >= heartbeatMs) {
+      lastLeaderWrite = beat;
+      try {
+        writeJson(leaderPath, { id, hostname, pid: process.pid, beat });
+      } catch {
+        // The directory can disappear during shutdown.
+      }
     }
     const handoff = readJson(handoffPath);
     if (!handoff || handoff.id === id) return;
-    if (typeof handoff.beat !== 'number' || !Number.isFinite(handoff.beat)) return;
-    if (handoff.beat > beat + 1000 || beat - handoff.beat >= ttlMs) return;
+    if (!freshBeat(handoff.beat, beat, ttlMs)) return;
+    markYielded();
     if (timer) clearInterval(timer);
     timer = null;
     log({ code: 'lock_handoff', hostname });
@@ -221,13 +369,14 @@ export async function acquireInstanceLock(dir, options = {}) {
   return {
     id,
     hostname,
+    bootId,
     leaderPath,
     lockPath,
     release,
     watch(handler) {
       handoffHandler = handler;
       if (released || timer) return;
-      timer = setInterval(tick, heartbeatMs);
+      timer = setInterval(tick, Math.max(handoffEvery, 20));
       if (typeof timer.unref === 'function') timer.unref();
       tick();
     },

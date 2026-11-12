@@ -162,12 +162,41 @@ function moneyprinterReady(ctx) {
   return ctx.presence.online('moneyprinter', ctx.now(), windowMs);
 }
 
+export function writeStartupResponse(req, res, phase) {
+  let pathname = '/';
+  try {
+    pathname = new URL(req.url || '/', 'http://127.0.0.1').pathname;
+  } catch {
+    pathname = '/';
+  }
+  const accepting = phase !== 'deferred';
+  if (req.method === 'GET' && pathname === '/v1/health') {
+    send(res, accepting ? 200 : 503, {
+      ok: accepting,
+      service: 'lines-video-api',
+      ready: false,
+      lock: accepting ? 'waiting' : 'yielded',
+    });
+    return;
+  }
+  if (!req.readableEnded) req.resume();
+  send(res, 503, {
+    error: {
+      code: 'starting',
+      message: 'This process is not serving yet.',
+      retryAfter: 1,
+    },
+  });
+}
+
 async function health(req, res, ctx) {
   const templateReady = Boolean(ctx.enableTemplate && ctx.template?.ready);
   const workerOnline = moneyprinterReady(ctx);
   send(res, 200, {
     ok: true,
     service: 'lines-video-api',
+    ready: true,
+    lock: 'held',
     defaultEngine: ctx.defaultEngine,
     engines: {
       template: { enabled: ctx.enableTemplate, ready: templateReady, mode: 'local' },

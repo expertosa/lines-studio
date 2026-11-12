@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createApp } from './app.js';
 import { parseTrustedProxies } from './auth-limit.js';
 import { parseBootstrap } from './bootstrap.js';
+import { waitForSuccessorExit } from './instance-lock.js';
 import { resolveLimits } from './limits.js';
 
 function fail(code, message) {
@@ -73,43 +75,81 @@ const ports = (process.env.LINES_WEBHOOK_PORTS || '443')
   .map((item) => Number(item.trim()))
   .filter((item) => Number.isInteger(item) && item > 0 && item < 65536);
 
-let app;
-try {
-  app = await createApp({
-    dataDir,
-    defaultEngine,
-    enableTemplate,
-    enableBlender,
-    enableUgc,
-    signingKey: process.env.LINES_SIGNING_KEY || null,
-    host: process.env.LINES_HOST || '127.0.0.1',
-    port: Number(process.env.LINES_PORT || 8080),
-    ffmpegPath: process.env.LINES_FFMPEG,
-    ffprobePath: process.env.LINES_FFPROBE,
-    arabicFont: process.env.LINES_FONT_ARABIC,
-    arabicFamily: process.env.LINES_FONT_ARABIC_FAMILY,
-    latinFont: process.env.LINES_FONT_LATIN,
-    latinFamily: process.env.LINES_FONT_LATIN_FAMILY,
-    limits,
-    bootstrap,
-    webhookPorts: new Set(ports.length ? ports : [443]),
-    trustProxy: process.env.LINES_TRUST_PROXY === '1',
-    trustedProxies,
-  });
-} catch (error) {
-  fail('boot', error.message);
+const lockHostname = process.env.LINES_LOCK_HOSTNAME || os.hostname();
+let active = null;
+let shuttingDown = false;
+
+function onSignal() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  const current = active;
+  if (!current) {
+    process.exit(0);
+    return;
+  }
+  current.close().then(() => process.exit(0), () => process.exit(1));
 }
 
-console.error(JSON.stringify({
-  level: 'info',
-  code: 'listening',
-  port: app.port,
-  defaultEngine,
-  templateReady: app.templateReady,
-}));
+process.on('SIGTERM', onSignal);
+process.on('SIGINT', onSignal);
 
-for (const signal of ['SIGTERM', 'SIGINT']) {
-  process.on(signal, () => {
-    app.close().then(() => process.exit(0)).catch(() => process.exit(1));
+const appOptions = {
+  dataDir,
+  defaultEngine,
+  enableTemplate,
+  enableBlender,
+  enableUgc,
+  signingKey: process.env.LINES_SIGNING_KEY || null,
+  host: process.env.LINES_HOST || '127.0.0.1',
+  port: Number(process.env.LINES_PORT || 8080),
+  ffmpegPath: process.env.LINES_FFMPEG,
+  ffprobePath: process.env.LINES_FFPROBE,
+  arabicFont: process.env.LINES_FONT_ARABIC,
+  arabicFamily: process.env.LINES_FONT_ARABIC_FAMILY,
+  latinFont: process.env.LINES_FONT_LATIN,
+  latinFamily: process.env.LINES_FONT_LATIN_FAMILY,
+  limits,
+  bootstrap,
+  webhookPorts: new Set(ports.length ? ports : [443]),
+  trustProxy: process.env.LINES_TRUST_PROXY === '1',
+  trustedProxies,
+  lockHostname,
+  onListen({ port }) {
+    console.error(JSON.stringify({ level: 'info', code: 'bind', port, ready: false }));
+  },
+};
+
+while (!shuttingDown) {
+  let reportHandoff;
+  const handed = new Promise((resolve) => {
+    reportHandoff = resolve;
   });
+  let app;
+  try {
+    app = await createApp({
+      ...appOptions,
+      onHandoff(info) {
+        console.error(JSON.stringify({ level: 'info', code: 'lock_idle', hostname: lockHostname }));
+        reportHandoff(info);
+      },
+    });
+  } catch (error) {
+    fail('boot', error.message);
+  }
+  active = app;
+  console.error(JSON.stringify({
+    level: 'info',
+    code: 'listening',
+    port: app.port,
+    ready: true,
+    defaultEngine,
+    templateReady: app.templateReady,
+  }));
+  const successor = await handed;
+  if (shuttingDown) break;
+  const outcome = await waitForSuccessorExit(dataDir, successor, {
+    shouldStop: () => shuttingDown,
+  });
+  if (outcome === 'stop' || shuttingDown) break;
+  active = null;
 }

@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { createWorker } from './worker.js';
-import { createHandler } from './http.js';
+import { createHandler, writeStartupResponse } from './http.js';
 import { resolveLimits } from './limits.js';
 import { safeJoin } from './paths.js';
 import { createTemplateEngine } from './engines/template.js';
@@ -11,7 +11,7 @@ import { openStore } from './store.js';
 import { applyBootstrap } from './bootstrap.js';
 import { installAppKey, installWorkerKey } from './keys.js';
 import { createAuthLimiter } from './auth-limit.js';
-import { acquireInstanceLock } from './instance-lock.js';
+import { acquireInstanceLock, bootFileFor, bootHasYielded, ensureBootId } from './instance-lock.js';
 import { createPresence } from './presence.js';
 
 function walkFiles(dir, visit) {
@@ -39,17 +39,57 @@ export async function createApp(options) {
     throw new Error('template engine is disabled');
   }
   const template = createTemplateEngine(options);
-  if (enableTemplate) await template.check();
   fs.mkdirSync(options.dataDir, { recursive: true });
   const tmpDir = path.join(options.dataDir, 'tmp');
   fs.mkdirSync(tmpDir, { recursive: true });
-  const instanceLock = await acquireInstanceLock(options.dataDir, {
-    waitMs: options.lockWaitMs,
-    pollMs: options.lockPollMs,
-    ttlMs: options.lockTtlMs,
-    heartbeatMs: options.lockHeartbeatMs,
-    hostname: options.lockHostname,
+  const bootFile = bootFileFor(options.lockHostname, options.lockBootFile);
+  const bootId = ensureBootId(bootFile);
+  let startupPhase = bootHasYielded(options.dataDir, bootId) ? 'deferred' : 'waiting';
+  let liveHandler = null;
+  const server = http.createServer((req, res) => {
+    if (startupPhase === 'ready' && liveHandler) {
+      liveHandler(req, res);
+      return;
+    }
+    try {
+      writeStartupResponse(req, res, startupPhase);
+    } catch {
+      if (!res.headersSent) res.writeHead(500).end();
+    }
   });
+  const host = options.host || '127.0.0.1';
+  const port = options.port ?? 0;
+  try {
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, host, resolve);
+    });
+  } catch (error) {
+    server.close();
+    throw error;
+  }
+  const bound = server.address();
+  if (typeof options.onListen === 'function') options.onListen({ port: bound.port, host });
+  if (enableTemplate) await template.check();
+  let instanceLock;
+  try {
+    instanceLock = await acquireInstanceLock(options.dataDir, {
+      waitMs: options.lockWaitMs,
+      pollMs: options.lockPollMs,
+      ttlMs: options.lockTtlMs,
+      heartbeatMs: options.lockHeartbeatMs,
+      handoffPollMs: options.lockHandoffPollMs,
+      hostname: options.lockHostname,
+      bootFile,
+      bootId,
+      onDefer() {
+        startupPhase = 'deferred';
+      },
+    });
+  } catch (error) {
+    await new Promise((resolve) => server.close(() => resolve()));
+    throw error;
+  }
   const releaseLock = () => instanceLock.release();
   const now = options.now || (() => Date.now());
   const limits = resolveLimits(options.limits);
@@ -66,6 +106,7 @@ export async function createApp(options) {
       // The original error is the one callers need.
     }
     releaseLock();
+    await new Promise((resolve) => server.close(() => resolve()));
     throw error;
   }
   const log = options.log || ((level, fields) => {
@@ -123,28 +164,17 @@ export async function createApp(options) {
   }
   const worker = createWorker(ctx);
   if (options.autostart !== false) worker.start();
-  const server = http.createServer(createHandler(ctx));
-  const host = options.host || '127.0.0.1';
-  const port = options.port ?? 0;
-  try {
-    await new Promise((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(port, host, resolve);
-    });
-  } catch (error) {
-    await worker.stop();
-    store.close();
-    releaseLock();
-    throw error;
-  }
-  const address = server.address();
+  liveHandler = createHandler(ctx);
+  startupPhase = 'ready';
   let closing = null;
   async function close() {
     if (closing) return closing;
     closing = (async () => {
       try {
         await worker.stop();
-        await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+        if (server.listening) {
+          await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+        }
         try {
           store.close();
         } catch {
@@ -158,12 +188,14 @@ export async function createApp(options) {
   }
   instanceLock.watch(() => {
     void close().finally(() => {
-      if (typeof options.onHandoff === 'function') options.onHandoff();
+      if (typeof options.onHandoff === 'function') {
+        options.onHandoff({ id: instanceLock.id, hostname: instanceLock.hostname, bootId: instanceLock.bootId });
+      }
     });
   });
   return {
-    url: `http://127.0.0.1:${address.port}`,
-    port: address.port,
+    url: `http://127.0.0.1:${bound.port}`,
+    port: bound.port,
     limits,
     store,
     templateReady: template.ready,

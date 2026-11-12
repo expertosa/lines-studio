@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
 import { lookup as dnsLookup } from 'node:dns/promises';
@@ -20,43 +21,80 @@ function alive(pid) {
   }
 }
 
-function acquireLock(dir) {
+const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * One API process per data volume. The lock names the container (hostname) and the pid,
+ * and its holder touches it every few seconds. In a container every process is pid 1,
+ * so a pid alone cannot tell a crashed earlier run from a live neighbour:
+ * - same hostname: stale when the pid is ours or no longer alive (a restart of this container);
+ * - another hostname, or an old pid-only lock: stale once it has not been touched for staleMs
+ *   (the previous container is gone). A live neighbour keeps it fresh, so we wait, then give up.
+ */
+export async function acquireLock(dir, {
+  staleMs = 30_000,
+  waitMs = 45_000,
+  touchMs = 10_000,
+  hostname = os.hostname(),
+  pid = process.pid,
+  now = () => Date.now(),
+  sleep = sleepMs,
+} = {}) {
   const lockPath = path.join(dir, 'worker.lock');
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  const owner = JSON.stringify({ host: hostname, pid });
+  const deadline = now() + waitMs;
+  for (;;) {
     try {
       const fd = fs.openSync(lockPath, 'wx');
-      fs.writeFileSync(fd, String(process.pid));
+      fs.writeFileSync(fd, owner);
       fs.closeSync(fd);
-      return () => {
+      const timer = setInterval(() => {
         try {
-          if (fs.readFileSync(lockPath, 'utf8').trim() === String(process.pid)) fs.rmSync(lockPath, { force: true });
+          const t = new Date();
+          fs.utimesSync(lockPath, t, t);
+        } catch {
+          // Lock removed under us; release() handles the rest.
+        }
+      }, touchMs);
+      timer.unref?.();
+      return () => {
+        clearInterval(timer);
+        try {
+          if (fs.readFileSync(lockPath, 'utf8').trim() === owner) fs.rmSync(lockPath, { force: true });
         } catch {
           // The lock is already gone.
         }
       };
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
-      let pid = 0;
-      try {
-        pid = Number(fs.readFileSync(lockPath, 'utf8'));
-      } catch {
-        pid = 0;
-      }
-      if (pid && alive(pid)) {
-        const busy = new Error('api_already_running');
-        busy.code = 'api_already_running';
-        throw busy;
-      }
+    }
+    let holder = null;
+    let age = 0;
+    try {
+      const text = fs.readFileSync(lockPath, 'utf8').trim();
+      age = now() - fs.statSync(lockPath).mtimeMs;
+      holder = text.startsWith('{') ? JSON.parse(text) : { host: null, pid: Number(text) };
+    } catch {
+      holder = null;
+    }
+    const stale = holder && (holder.host === hostname
+      ? holder.pid === pid || !alive(holder.pid)
+      : age > staleMs);
+    if (stale || holder === null) {
       try {
         fs.rmSync(lockPath, { force: true });
       } catch {
         // Another process removed it first.
       }
+      if (stale) continue;
     }
+    if (now() >= deadline) {
+      const busy = new Error('api_already_running');
+      busy.code = 'api_already_running';
+      throw busy;
+    }
+    await sleep(1000);
   }
-  const busy = new Error('api_already_running');
-  busy.code = 'api_already_running';
-  throw busy;
 }
 
 function walkFiles(dir, visit) {
@@ -88,7 +126,7 @@ export async function createApp(options) {
   fs.mkdirSync(options.dataDir, { recursive: true });
   const tmpDir = path.join(options.dataDir, 'tmp');
   fs.mkdirSync(tmpDir, { recursive: true });
-  const releaseLock = acquireLock(options.dataDir);
+  const releaseLock = await acquireLock(options.dataDir, options.lock);
   const now = options.now || (() => Date.now());
   const limits = resolveLimits(options.limits);
   let store;

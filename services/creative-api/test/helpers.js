@@ -77,7 +77,11 @@ export async function createTestApp(overrides = {}) {
     lockPollMs: overrides.lockPollMs,
     lockTtlMs: overrides.lockTtlMs,
     lockHeartbeatMs: overrides.lockHeartbeatMs,
+    lockHandoffPollMs: overrides.lockHandoffPollMs,
     lockHostname: overrides.lockHostname,
+    lockBootFile: overrides.lockBootFile,
+    onListen: overrides.onListen,
+    onHandoff: overrides.onHandoff,
     webhookLookup: overrides.webhookLookup || (async () => ['8.8.8.8']),
     webhookTransport: overrides.webhookTransport || (async (request) => {
       calls.push(request);

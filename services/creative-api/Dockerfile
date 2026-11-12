@@ -3,7 +3,10 @@
 # One replica. SQLite is not safe with two writers. worker.lock is an
 # exclusive lock released on process death; a new container waits for handoff.
 FROM node:22-alpine
-RUN apk add --no-cache ffmpeg font-noto-arabic font-dejavu \
+# curl and wget are what Coolify runs inside the container
+# (`curl -f URL || wget -q -O- URL || exit 1`). Without them the log is
+# "curl: not found" and the probe does not see /v1/health.
+RUN apk add --no-cache ffmpeg font-noto-arabic font-dejavu curl wget \
   && mkdir -p /data \
   && chown node:node /data
 WORKDIR /srv
@@ -19,6 +22,6 @@ ENV NODE_ENV=production \
   LINES_TRUST_PROXY=1
 EXPOSE 8080
 VOLUME /data
-HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:8080/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=5s --timeout=3s --start-period=15s --retries=10 \
+  CMD curl -fsS --max-time 2 http://127.0.0.1:8080/v1/health
 CMD ["node", "src/index.js"]

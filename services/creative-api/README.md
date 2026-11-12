@@ -185,6 +185,8 @@ curl -fsS http://127.0.0.1:8080/v1/health
 
 Coolify: new application, Dockerfile `services/creative-api/Dockerfile`, build context `services/creative-api`, port 8080, domain `api.lines.studio`, one instance, volume mounted at `/data`. Do not point the marketing nginx at this process.
 
+**Redeploying:** only one API process may use `/data` (lock file `/data/worker.lock`, naming the container and pid, touched every 10 s). Coolify's rolling update starts the new container while the old one still holds the lock, so the new one waits 45 s and then exits with `api_already_running`, and Coolify keeps the old container. To ship a new version, **Stop** the app, then **Deploy** (about a minute of downtime). After a crash, a lock left by a gone container is taken over automatically once it is 30 s old.
+
 Contract file: `docs/video-api.openapi.yaml`. Caller guide: `docs/video-api-integration.md`.
 
 ## Not launch-ready

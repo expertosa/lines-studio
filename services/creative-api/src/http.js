@@ -562,7 +562,7 @@ export function createHandler(ctx) {
       }
       const url = pathname(req);
       if (url.pathname !== '/v1/health') {
-        const blocked = ctx.authFailures.check(clientIp(req, ctx.trustProxy), ctx.now());
+        const blocked = ctx.authFailures.check(clientIp(req, ctx.trustProxy, ctx.trustedProxies), ctx.now());
         if (blocked) {
           if (!req.readableEnded) req.resume();
           fail(res, new ApiError(429, 'rate_limited', 'Too many failed authentication attempts.', undefined, { retryAfter: blocked.retryAfter }));
@@ -584,7 +584,7 @@ export function createHandler(ctx) {
       }
       if (!req.readableEnded) req.resume();
       if (error instanceof ApiError && error.status === 401) {
-        const hit = ctx.authFailures.record(clientIp(req, ctx.trustProxy), ctx.now());
+        const hit = ctx.authFailures.record(clientIp(req, ctx.trustProxy, ctx.trustedProxies), ctx.now());
         if (hit.limited) {
           fail(res, new ApiError(429, 'rate_limited', 'Too many failed authentication attempts.', undefined, { retryAfter: hit.retryAfter }));
           return;

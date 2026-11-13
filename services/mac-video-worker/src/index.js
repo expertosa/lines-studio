@@ -73,6 +73,7 @@ export async function main({ fetchImpl = globalThis.fetch, sleep = (ms) => new P
       mptBaseUrl,
       fetchImpl,
       fontName: process.env.MPT_FONT_NAME,
+      ffmpeg: process.env.LINES_FFMPEG || 'ffmpeg',
       sleep,
       pollMs: Number(process.env.MPT_POLL_MS || 3000),
       heartbeatMs: Number(process.env.LINES_HEARTBEAT_MS || 30_000),

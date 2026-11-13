@@ -2,8 +2,15 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sanitizeMessage } from './api.js';
+import { downloadShowcaseImage } from './image-url.js';
 import { runMoneyPrinter } from './mpt.js';
 import { assertOnDataVolume, isInside, resolveVideoRef } from './paths.js';
+import { renderShowcaseFile } from './showcase.js';
+
+export function rendererFor(job) {
+  if (job?.engine === 'showcase' || job?.style === 'showcase') return 'showcase';
+  return 'moneyprinter';
+}
 
 function download(url, destination, fetchImpl) {
   return fetchImpl(url, { redirect: 'manual' }).then(async (response) => {
@@ -48,20 +55,40 @@ export async function renderClaimedJob(job, deps) {
   const videoPath = path.join(tmpDir, `${job.id}.mp4`);
   const thumbPath = path.join(tmpDir, `${job.id}.jpg`);
   try {
-    const task = await runMoneyPrinter(job, {
-      baseUrl: deps.mptBaseUrl,
-      fetchImpl: deps.fetchImpl,
-      fontName: deps.fontName,
-      sleep: deps.sleep,
-      signal: controller.signal,
-      pollMs: deps.pollMs,
-      now: deps.now,
-      heartbeat: () => deps.client.heartbeat(job.id),
-    });
-    const ref = task.videos?.[0] || task.combined_videos?.[0];
-    const resolved = resolveVideoRef(ref, { mptBase: deps.mptBaseUrl, workerRoot: deps.workerRoot });
-    if (resolved.kind === 'file') fs.copyFileSync(resolved.file, videoPath);
-    else await download(resolved.url, videoPath, deps.fetchImpl);
+    if (rendererFor(job) === 'showcase') {
+      const imagePath = path.join(tmpDir, `${job.id}.image`);
+      try {
+        await downloadShowcaseImage(job.imageUrl, imagePath, {
+          fetchImpl: deps.fetchImpl,
+          lookup: deps.lookup,
+          signal: controller.signal,
+        });
+        await renderShowcaseFile({
+          ffmpeg: deps.ffmpeg || 'ffmpeg',
+          imagePath,
+          outputPath: videoPath,
+          seconds: job.seconds,
+          signal: controller.signal,
+        });
+      } finally {
+        fs.rmSync(imagePath, { force: true });
+      }
+    } else {
+      const task = await runMoneyPrinter(job, {
+        baseUrl: deps.mptBaseUrl,
+        fetchImpl: deps.fetchImpl,
+        fontName: deps.fontName,
+        sleep: deps.sleep,
+        signal: controller.signal,
+        pollMs: deps.pollMs,
+        now: deps.now,
+        heartbeat: () => deps.client.heartbeat(job.id),
+      });
+      const ref = task.videos?.[0] || task.combined_videos?.[0];
+      const resolved = resolveVideoRef(ref, { mptBase: deps.mptBaseUrl, workerRoot: deps.workerRoot });
+      if (resolved.kind === 'file') fs.copyFileSync(resolved.file, videoPath);
+      else await download(resolved.url, videoPath, deps.fetchImpl);
+    }
     const hasThumb = await grabThumbnail(deps.ffmpeg || 'ffmpeg', videoPath, thumbPath);
     await deps.client.upload(job.id, videoPath, hasThumb ? thumbPath : null);
     await deps.client.complete(job.id);

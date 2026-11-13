@@ -1,4 +1,4 @@
-import { APP_SCOPES, WORKER_SCOPE } from './constants.js';
+import { APP_SCOPES, WORKER_ENGINES, WORKER_SCOPE } from './constants.js';
 import { generateSecret, generateToken, hashToken, tokenPrefix, assertTokenShape } from './auth.js';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -49,10 +49,7 @@ export function installAppKey(store, input, defaults) {
 export function installWorkerKey(store, input) {
   assertId(input.id, 'worker id');
   if (!assertTokenShape(input.token)) throw new Error('token must be 24 to 256 URL-safe characters');
-  const engines = input.engines?.length ? input.engines : ['moneyprinter'];
-  for (const engine of engines) {
-    if (!['moneyprinter', 'template', 'external', 'blender', 'ugc'].includes(engine)) throw new Error('worker engine is invalid');
-  }
+  const engines = normalizeEngines(input.engines?.length ? input.engines : ['moneyprinter']);
   store.upsertKey({
     id: input.id,
     tenantId: null,
@@ -63,6 +60,25 @@ export function installWorkerKey(store, input) {
     engines,
   });
   return { keyId: input.id, token: input.token, engines };
+}
+
+export function setWorkerEngines(store, id, engines) {
+  assertId(id, 'worker id');
+  const next = normalizeEngines(engines);
+  const key = store.listKeys().find((item) => item.id === id && item.status === 'active');
+  if (!key || key.kind !== 'worker') throw new Error('worker key not found');
+  if (!store.setKeyEngines(id, next)) throw new Error('worker key not found');
+  return { keyId: id, engines: next };
+}
+
+function normalizeEngines(engines) {
+  if (!Array.isArray(engines) || engines.length === 0) throw new Error('worker engine is invalid');
+  const unique = [];
+  for (const engine of engines) {
+    if (!WORKER_ENGINES.includes(engine)) throw new Error('worker engine is invalid');
+    if (!unique.includes(engine)) unique.push(engine);
+  }
+  return unique;
 }
 
 export function rotateKey(store, id) {

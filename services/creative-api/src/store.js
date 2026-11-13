@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   language TEXT NOT NULL,
   seconds INTEGER NOT NULL,
   voice TEXT NOT NULL,
+  subtitles INTEGER NOT NULL DEFAULT 0,
+  voiceover INTEGER NOT NULL DEFAULT 1,
+  image_url TEXT,
   callback_url TEXT,
   metadata_json TEXT NOT NULL,
   request_hash TEXT NOT NULL,
@@ -148,6 +151,9 @@ function mapJob(row) {
     language: row.language,
     seconds: Number(row.seconds),
     voice: row.voice,
+    subtitles: Number(row.subtitles) === 1,
+    voiceover: row.voiceover == null ? true : Number(row.voiceover) === 1,
+    imageUrl: row.image_url || null,
     callbackUrl: row.callback_url,
     metadata: JSON.parse(row.metadata_json),
     requestHash: row.request_hash,
@@ -206,6 +212,11 @@ function mapWebhook(row) {
   };
 }
 
+function ensureJobColumn(db, name, ddl) {
+  const present = db.prepare('PRAGMA table_info(jobs)').all().map((row) => row.name);
+  if (!present.includes(name)) db.exec(`ALTER TABLE jobs ADD COLUMN ${ddl}`);
+}
+
 export function openStore(dataDir, { now = () => Date.now() } = {}) {
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, 'creative.sqlite');
@@ -215,6 +226,9 @@ export function openStore(dataDir, { now = () => Date.now() } = {}) {
   if (columns.includes('brief_json')) {
     throw new Error('This data directory was created by the creative-jobs API. Use a fresh LINES_DATA_DIR.');
   }
+  ensureJobColumn(db, 'subtitles', 'subtitles INTEGER NOT NULL DEFAULT 0');
+  ensureJobColumn(db, 'voiceover', 'voiceover INTEGER NOT NULL DEFAULT 1');
+  ensureJobColumn(db, 'image_url', 'image_url TEXT');
 
   const getKeyByHash = db.prepare(`SELECT * FROM api_keys WHERE token_hash = ? AND status = 'active'`);
   const getKeyById = db.prepare('SELECT * FROM api_keys WHERE id = ?');
@@ -350,6 +364,12 @@ export function openStore(dataDir, { now = () => Date.now() } = {}) {
     listKeys() {
       return db.prepare('SELECT * FROM api_keys ORDER BY created_at ASC').all().map(publicKey);
     },
+    setKeyEngines(id, engines) {
+      const result = db.prepare(`
+        UPDATE api_keys SET engines = ? WHERE id = ? AND kind = 'worker' AND status = 'active'
+      `).run(JSON.stringify(engines), id);
+      return Number(result.changes) === 1;
+    },
     getActiveKeyByHash(tokenHash) {
       return mapKey(getKeyByHash.get(tokenHash));
     },
@@ -394,13 +414,13 @@ export function openStore(dataDir, { now = () => Date.now() } = {}) {
           db.prepare(`
             INSERT INTO jobs (
               id, tenant_id, end_user_id, reference, title, prompt, script_json, style, format,
-              language, seconds, voice, callback_url, metadata_json, request_hash, idempotency_key,
+              language, seconds, voice, subtitles, voiceover, image_url, callback_url, metadata_json, request_hash, idempotency_key,
               status, engine, width, height, attempt, max_attempts, cancel_requested,
               error_code, error_message, lease_owner, lease_expires_at, created_at, updated_at,
               started_at, finished_at, heartbeat_at, deadline_at, artifact_ttl_ms
             ) VALUES (
               ?, ?, ?, ?, ?, ?, ?, ?, ?,
-              ?, ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
               'queued', ?, ?, ?, 0, ?, 0,
               NULL, NULL, NULL, NULL, ?, ?,
               NULL, NULL, NULL, ?, ?
@@ -418,6 +438,9 @@ export function openStore(dataDir, { now = () => Date.now() } = {}) {
             input.language,
             input.seconds,
             input.voice,
+            input.subtitles ? 1 : 0,
+            input.voiceover === false ? 0 : 1,
+            input.imageUrl || null,
             input.callbackUrl,
             JSON.stringify(input.metadata || {}),
             input.requestHash,

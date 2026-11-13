@@ -46,6 +46,14 @@ export const JOB_STATUSES = Object.freeze(['queued', 'running', 'succeeded', 'fa
 export const FORMATS = Object.freeze(['9:16', '16:9', '1:1']);
 export const LANGUAGES = Object.freeze(['ar', 'en']);
 export const SECONDS = Object.freeze([15, 30, 60]);
+export const WORKER_ENGINES = Object.freeze([
+  'moneyprinter',
+  'template',
+  'external',
+  'blender',
+  'ugc',
+  'showcase',
+]);
 
 /** Nominal pixels for the MoneyPrinterTurbo engine (1080p). */
 export const NOMINAL_SIZE = Object.freeze({
@@ -59,6 +67,11 @@ export const TEMPLATE_SIZE = Object.freeze({
   '9:16': Object.freeze({ width: 360, height: 640 }),
   '16:9': Object.freeze({ width: 640, height: 360 }),
   '1:1': Object.freeze({ width: 360, height: 360 }),
+});
+
+/** Vertical frame the showcase style encodes with local ffmpeg. */
+export const SHOWCASE_SIZE = Object.freeze({
+  '9:16': Object.freeze({ width: 720, height: 1280 }),
 });
 
 export const BUILTIN_WORKER_ID = 'builtin:template';

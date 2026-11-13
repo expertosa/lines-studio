@@ -9,6 +9,7 @@ import {
   installWorkerKey,
   rotateKey,
   rotateWebhook,
+  setWorkerEngines,
 } from './keys.js';
 
 function fail(message) {
@@ -62,6 +63,12 @@ try {
     const engines = (flag(args, 'engines') || 'moneyprinter').split(',').filter(Boolean);
     const result = installWorkerKey(store, { id, token: generateToken(), engines });
     process.stdout.write(formatKeyLine(result));
+  } else if (command === 'set-engines') {
+    const id = flag(args, 'id');
+    const engines = flag(args, 'engines');
+    if (!id || !engines) fail('set-engines requires --id and --engines');
+    const result = setWorkerEngines(store, id, engines.split(',').filter(Boolean));
+    process.stdout.write(`keyId: ${result.keyId}\nengines: ${result.engines.join(',')}\n`);
   } else if (command === 'rotate-key') {
     const id = flag(args, 'id');
     if (!id) fail('rotate-key requires --id');
@@ -88,7 +95,7 @@ try {
       ].join('\t') + '\n');
     }
   } else {
-    fail('commands: create-app, create-worker, rotate-key, rotate-webhook, revoke, list');
+    fail('commands: create-app, create-worker, set-engines, rotate-key, rotate-webhook, revoke, list');
   }
 } catch (error) {
   fail(error.message);

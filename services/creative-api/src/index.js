@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createApp } from './app.js';
+import { imageHostSet } from './image-url.js';
 import { parseTrustedProxies } from './auth-limit.js';
 import { parseBootstrap } from './bootstrap.js';
 import { waitForSuccessorExit } from './instance-lock.js';
@@ -99,6 +100,7 @@ const appOptions = {
   enableTemplate,
   enableBlender,
   enableUgc,
+  imageHosts: [...imageHostSet((process.env.LINES_IMAGE_HOSTS || '').split(','))],
   signingKey: process.env.LINES_SIGNING_KEY || null,
   host: process.env.LINES_HOST || '127.0.0.1',
   port: Number(process.env.LINES_PORT || 8080),

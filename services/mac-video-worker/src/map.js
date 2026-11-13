@@ -12,9 +12,11 @@ const RATES = {
 
 /**
  * Map a claimed Lines job onto MoneyPrinterTurbo's POST /api/v1/videos body.
- * Stock footage is Pixabay. Speech is Edge TTS. A supplied script is used as
- * the narration; a prompt alone is sent as the script instruction so the local
- * LLM writes it.
+ * Stock footage is Pixabay. Speech is Edge TTS unless `voiceover` is false,
+ * which selects MoneyPrinterTurbo's `no-voice` path and skips music.
+ * Subtitles are burned only when `subtitles` is true.
+ * A supplied script is used as the narration; a prompt alone is sent as the
+ * script instruction so the local LLM writes it.
  */
 export function toMoneyPrinter(job, { fontName } = {}) {
   if (!job || job.engine !== 'moneyprinter') {
@@ -22,6 +24,7 @@ export function toMoneyPrinter(job, { fontName } = {}) {
   }
   const narration = job.script?.text?.trim() || '';
   const font = fontName || 'NotoNaskhArabic-Regular.ttf';
+  const speak = job.voiceover !== false;
   return {
     video_subject: job.title,
     video_script: narration,
@@ -36,12 +39,15 @@ export function toMoneyPrinter(job, { fontName } = {}) {
     video_count: 1,
     video_source: 'pixabay',
     video_language: job.language,
-    voice_name: job.voice || (job.language === 'ar' ? 'ar-SA-HamedNeural' : 'en-US-JennyNeural'),
-    voice_volume: 1,
+    voice_name: speak
+      ? (job.voice || (job.language === 'ar' ? 'ar-SA-HamedNeural' : 'en-US-JennyNeural'))
+      : 'no-voice',
+    voice_volume: speak ? 1 : 0,
     voice_rate: RATES[job.style] || 1,
-    bgm_type: 'random',
-    bgm_volume: job.style === 'calm' ? 0.12 : 0.2,
-    subtitle_enabled: true,
+    bgm_type: speak ? 'random' : '',
+    bgm_volume: speak ? (job.style === 'calm' ? 0.12 : 0.2) : 0,
+    // Burned-in text only when the job asks for it. Omitted means off.
+    subtitle_enabled: job.subtitles === true,
     subtitle_position: 'bottom',
     font_name: font,
     text_fore_color: '#FFFFFF',

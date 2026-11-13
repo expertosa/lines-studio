@@ -48,6 +48,25 @@ export async function queueVideo({ reference, userId, title, prompt }) {
 
 `callbackUrl` must be public https on port 443. Private, loopback, and link-local hosts are rejected.
 
+`subtitles` defaults to false. Set `subtitles: true` only when the video should show captions. `voiceover` defaults to true; `voiceover: false` skips narration.
+
+A showcase clip is a silent vertical move over a screenshot you already host:
+
+```js
+body: JSON.stringify({
+  reference,
+  title,
+  style: 'showcase',
+  format: '9:16',
+  language: 'ar',
+  seconds: 8,
+  imageUrl: 'https://lines.studio/work/mashhad.webp',
+  callbackUrl: 'https://YOUR_PUBLIC_HOST/api/app/studio/render-callback',
+}),
+```
+
+`seconds` is 6–10. `imageUrl` is `https://lines.studio/work/<id>.webp` (png and jpeg too) or an artifact URL on `https://api.lines.studio`. The clip has no captions, no logo, and no audio. Do not send `subtitles: true` or `voiceover: true` with this style.
+
 Poll `GET /v1/jobs/:id` with the same bearer if you do not want to wait for the webhook. List with `GET /v1/jobs?status=succeeded&cursor=`.
 
 Download with the bearer:

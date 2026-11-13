@@ -9,6 +9,6 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/api.js && node --check src/index.js && node --check src/map.js && node --check src/mpt.js && node --check src/paths.js && node --check src/run.js && node --check test/map.test.js && node --check test/mpt.test.js"
+    "lint": "node --check src/api.js && node --check src/image-url.js && node --check src/index.js && node --check src/map.js && node --check src/mpt.js && node --check src/paths.js && node --check src/run.js && node --check src/showcase.js && node --check test/map.test.js && node --check test/mpt.test.js && node --check test/showcase.test.js"
   }
 }

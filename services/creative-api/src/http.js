@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { JOB_STATUSES, SECONDS } from './constants.js';
+import { JOB_STATUSES } from './constants.js';
 import { ApiError, CodedError } from './errors.js';
 import { assertApp, assertNoCredentialQuery, assertWorker, singleHeader } from './auth.js';
 import { storeFile } from './artifacts.js';
@@ -10,6 +10,7 @@ import { presentJob, presentWorkerJob } from './present.js';
 import { artifactSignature, signaturesEqual } from './sign.js';
 import { listStyles } from './styles.js';
 import { blenderEngine } from './engines/blender.js';
+import { showcaseEngine } from './engines/showcase.js';
 import { ugcEngine } from './engines/ugc.js';
 import { validateJob } from './validate.js';
 import { clientIp } from './auth-limit.js';
@@ -157,9 +158,8 @@ function decodeCursor(value) {
   return { id: parsed.id, createdAt: parsed.t };
 }
 
-function moneyprinterReady(ctx) {
-  const windowMs = ctx.limits.leaseMs * 2;
-  return ctx.presence.online('moneyprinter', ctx.now(), windowMs);
+function engineOnline(ctx, engine) {
+  return ctx.presence.online(engine, ctx.now(), ctx.limits.leaseMs * 2);
 }
 
 export function writeStartupResponse(req, res, phase) {
@@ -191,7 +191,8 @@ export function writeStartupResponse(req, res, phase) {
 
 async function health(req, res, ctx) {
   const templateReady = Boolean(ctx.enableTemplate && ctx.template?.ready);
-  const workerOnline = moneyprinterReady(ctx);
+  const workerOnline = engineOnline(ctx, 'moneyprinter');
+  const showcaseOnline = engineOnline(ctx, 'showcase');
   send(res, 200, {
     ok: true,
     service: 'lines-video-api',
@@ -208,6 +209,13 @@ async function health(req, res, ctx) {
       },
       blender: { enabled: Boolean(ctx.enableBlender), mode: blenderEngine.mode, macRequired: blenderEngine.macRequired },
       ugc: { enabled: Boolean(ctx.enableUgc), mode: ugcEngine.mode, paidCalls: ugcEngine.paidCalls },
+      showcase: {
+        mode: showcaseEngine.mode,
+        ready: showcaseOnline,
+        worker: showcaseOnline ? 'online' : 'offline',
+        macRequired: showcaseEngine.macRequired,
+        paidCalls: false,
+      },
       external: { configured: false },
     },
   });
@@ -233,7 +241,7 @@ async function quote(req, res, ctx) {
   const language = url.searchParams.get('language') || 'ar';
   const catalog = listStyles(styleOptions(ctx));
   const style = catalog.find((item) => item.id === styleId);
-  if (!style || !SECONDS.includes(seconds) || !style.formats.includes(format) || !style.languages.includes(language)) {
+  if (!style || !style.seconds.includes(seconds) || !style.formats.includes(format) || !style.languages.includes(language)) {
     throw new ApiError(422, 'validation_error', 'Quote is invalid.', [
       { path: 'seconds', code: 'enum' },
     ]);
@@ -259,6 +267,7 @@ async function createJob(req, res, ctx) {
     ...styleOptions(ctx),
     lookup: ctx.webhookLookup,
     allowedPorts: ctx.webhookPorts,
+    imageHosts: ctx.imageHosts,
   });
   if (jobInput.engine === 'template' && !ctx.template?.ready) {
     throw new ApiError(503, 'engine_unavailable', 'Template engine is not available.', undefined, { retryAfter: 30 });

@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pull worker for Saudi ad localization: Runway Aleph 2.0 visual swaps plus HeyGen Precision translation with lip-sync.",
+  "description": "Pull worker for Saudi ad localization in three tiers: free (local Saudi TTS + MuseTalk), economy (Gemini Omni Flash swaps + local voice), pro (Runway Aleph 2.0 + HeyGen Precision).",
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/api.js && node --check src/heygen_translate.js && node --check src/index.js && node --check src/run.js && node --check src/runway_aleph.js"
+    "lint": "node --check src/api.js && node --check src/gemini_edit.js && node --check src/local_tools.js && node --check src/heygen_translate.js && node --check src/index.js && node --check src/run.js && node --check src/runway_aleph.js"
   }
 }

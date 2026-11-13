@@ -71,7 +71,7 @@ const DEFINITIONS = Object.freeze([
     id: 'localize',
     label: 'Ad localization',
     engine: 'localize',
-    description: 'Saudi version of an existing video ad: Aleph 2.0 swaps characters, outfits, products and backgrounds, then HeyGen Precision translates to Arabic (Saudi Arabia) with lip-sync when dub is set. Requires the localize spec. Paid vendor calls run on the localize worker.',
+    description: 'Saudi version of an existing video ad. localize.tier picks the pipeline: free (Mac mini: local Saudi voice + MuseTalk lip-sync, no swaps, $0), economy (Gemini Omni Flash 720p swaps + local voice and lip-sync), or pro (default: Aleph 2.0 swaps + HeyGen Precision Arabic (Saudi Arabia) dub with lip-sync). Requires the localize spec. Work runs on the localize worker.',
     requiresLocalize: true,
   }),
 ]);

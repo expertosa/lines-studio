@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient, sanitizeMessage } from './api.js';
+import { geminiConfig } from './gemini_edit.js';
+import { localConfig } from './local_tools.js';
 import { renderClaimedJob } from './run.js';
 
 function readEnvKey(names) {
@@ -41,6 +43,10 @@ export async function main({ fetchImpl = globalThis.fetch, sleep = (ms) => new P
   // Prefer env names from the task; accept the official Runway SDK name as an alias.
   const runwayKey = loadKey(['RUNWAY_API_KEY', 'RUNWAYML_API_SECRET'], 'RUNWAY_API_KEY_FILE', path.join(secrets, 'runway-key'));
   const heygenKey = loadKey(['HEYGEN_API_KEY'], 'HEYGEN_API_KEY_FILE', path.join(secrets, 'heygen-key'));
+  // Economy tier: Google access token from env or secrets/google-access-token (short-lived; refresh outside this process).
+  const tokenFile = process.env.GOOGLE_OAUTH_ACCESS_TOKEN_FILE || path.join(secrets, 'google-access-token');
+  const readGoogleToken = () => (fs.existsSync(tokenFile) ? readSecretFile(tokenFile) : '');
+  const local = localConfig(process.env);
   const pollMs = Number(process.env.LINES_WORKER_POLL_MS || 5000);
   const log = (level, fields) => console.error(JSON.stringify({ level, time: new Date().toISOString(), ...fields }));
   let stopped = false;
@@ -50,6 +56,10 @@ export async function main({ fetchImpl = globalThis.fetch, sleep = (ms) => new P
     engine: 'localize',
     runwayConfigured: Boolean(runwayKey),
     heygenConfigured: Boolean(heygenKey),
+    geminiConfigured: Boolean(geminiConfig(process.env, readGoogleToken).token && process.env.GEMINI_VERTEX_PROJECT && process.env.GEMINI_GCS_BUCKET),
+    localTts: local.tts,
+    localTtsConfigured: Boolean(local.tts === 'namaa' ? local.namaaCmd : local.edgeBin),
+    lipsyncConfigured: Boolean(local.musetalkCmd),
   });
   while (!stopped) {
     let claim = null;
@@ -64,12 +74,16 @@ export async function main({ fetchImpl = globalThis.fetch, sleep = (ms) => new P
       await sleep(pollMs);
       continue;
     }
-    log('info', { code: 'claimed', jobId: claim.job.id, swaps: claim.job.localize?.swaps?.length || 0, dub: Boolean(claim.job.localize?.dub) });
+    log('info', { code: 'claimed', jobId: claim.job.id, tier: claim.job.localize?.tier || 'pro', swaps: claim.job.localize?.swaps?.length || 0, dub: Boolean(claim.job.localize?.dub) });
     const result = await renderClaimedJob(claim.job, {
       client,
       tmpDir,
       runwayKey,
       heygenKey,
+      // Read per job so a refreshed token file is picked up without a restart.
+      gemini: geminiConfig(process.env, readGoogleToken),
+      localConfig: local,
+      geminiPollMs: Number(process.env.GEMINI_POLL_MS || 10_000),
       fetchImpl,
       sleep,
       pollMs,

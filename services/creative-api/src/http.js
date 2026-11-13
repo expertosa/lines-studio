@@ -11,7 +11,7 @@ import { artifactSignature, signaturesEqual } from './sign.js';
 import { listStyles } from './styles.js';
 import { blenderEngine } from './engines/blender.js';
 import { ugcEngine } from './engines/ugc.js';
-import { estimateLocalizeCost, localizeEngine } from './engines/localize.js';
+import { DEFAULT_TIER, TIERS, TIER_INFO, estimateLocalizeCost, localizeEngine } from './engines/localize.js';
 import { validateJob } from './validate.js';
 import { clientIp } from './auth-limit.js';
 
@@ -216,6 +216,7 @@ async function health(req, res, ctx) {
         paidCalls: localizeEngine.paidCalls,
         swapModel: localizeEngine.swapModel,
         translateModel: localizeEngine.translateModel,
+        tiers: TIERS.slice(),
       },
       external: { configured: false },
     },
@@ -230,7 +231,7 @@ async function styles(req, res, ctx) {
 async function quote(req, res, ctx) {
   assertApp(req, ctx.store, 'jobs:read');
   const url = pathname(req);
-  const allowed = new Set(['seconds', 'style', 'format', 'language', 'swaps', 'dub']);
+  const allowed = new Set(['seconds', 'style', 'format', 'language', 'swaps', 'dub', 'tier']);
   for (const key of url.searchParams.keys()) {
     if (!allowed.has(key)) {
       throw new ApiError(422, 'validation_error', 'Query is invalid.', [{ path: key, code: 'unknown' }]);
@@ -248,7 +249,7 @@ async function quote(req, res, ctx) {
     ]);
   }
   if (style.engine !== 'localize') {
-    for (const key of ['swaps', 'dub']) {
+    for (const key of ['swaps', 'dub', 'tier']) {
       if (url.searchParams.has(key)) {
         throw new ApiError(422, 'validation_error', 'Query is invalid.', [{ path: key, code: 'unknown' }]);
       }
@@ -273,7 +274,18 @@ async function quote(req, res, ctx) {
     if (!Number.isInteger(swapCount) || swapCount < 0 || swapCount > 30) {
       throw new ApiError(422, 'validation_error', 'Quote is invalid.', [{ path: 'swaps', code: 'enum' }]);
     }
-    body.cost = estimateLocalizeCost({ seconds, swapCount, dub });
+    const tierRaw = url.searchParams.get('tier');
+    const tier = tierRaw == null || tierRaw === '' ? DEFAULT_TIER : tierRaw;
+    if (!TIERS.includes(tier)) {
+      throw new ApiError(422, 'validation_error', 'Quote is invalid.', [{ path: 'tier', code: 'enum' }]);
+    }
+    if (tier === 'free' && swapsRaw != null && swapsRaw !== '' && swapCount > 0) {
+      throw new ApiError(422, 'validation_error', 'Quote is invalid.', [{ path: 'swaps', code: 'tier_unsupported' }]);
+    }
+    const effectiveSwaps = tier === 'free' ? 0 : swapCount;
+    body.tier = tier;
+    body.tierInfo = TIER_INFO[tier];
+    body.cost = estimateLocalizeCost({ seconds, swapCount: effectiveSwaps, dub: tier === 'free' ? true : dub, tier });
   }
   send(res, 200, body);
 }

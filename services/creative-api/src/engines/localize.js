@@ -1,7 +1,16 @@
 /**
  * Ad localization (style `localize`): take an existing video ad and produce a
  * Saudi version by swapping characters, outfits, products and backgrounds,
- * then optionally translating voice and lips with HeyGen Precision.
+ * then optionally dubbing it in Saudi Arabic with lip-sync.
+ *
+ * Three tiers (`localize.tier`, default `pro`):
+ * - `free`: Mac mini only, $0. Local Saudi voice (Edge TTS ar-SA voices that the
+ *   MoneyPrinterTurbo worker already uses, or NAMAA-Saudi-TTS when installed) and
+ *   local MuseTalk lip-sync. No visual swaps. Queued behind the Mac.
+ * - `economy`: Gemini Omni 1.2 Flash video edit at 720p for swaps ($0.07 per output
+ *   second, clips of 3–15 s, so longer ads are cut into ≤15 s segments), then the
+ *   same local voice and lip-sync as free.
+ * - `pro`: Aleph 2.0 swaps + HeyGen Precision translation with lip-sync.
  *
  * This API only validates, stores, quotes and queues the job. It never calls
  * a vendor. A pull worker with `--engines localize` (`services/localize-worker`)
@@ -24,6 +33,66 @@ export const localizeEngine = Object.freeze({
   paidCalls: true,
   swapModel: 'aleph2',
   translateModel: 'heygen_precision',
+  tiers: Object.freeze(['free', 'economy', 'pro']),
+});
+
+export const TIERS = Object.freeze(['free', 'economy', 'pro']);
+export const DEFAULT_TIER = 'pro';
+
+/** Gemini Omni 1.2 Flash video edit (Google Cloud Interactions API), economy tier swaps. */
+export const GEMINI_EDIT_MODEL = 'gemini-omni-1.2-flash';
+export const GEMINI_EDIT_RESOLUTION = '720p';
+export const GEMINI_EDIT_USD_PER_SEC = 0.07;
+export const GEMINI_EDIT_MIN_SECONDS = 3;
+export const GEMINI_EDIT_MAX_SECONDS = 15;
+
+/** Split an ad into Gemini-sized clips (each 3–15 s). Returns segment lengths in seconds. */
+export function geminiSegments(seconds) {
+  const total = Number(seconds);
+  if (!Number.isFinite(total) || total < GEMINI_EDIT_MIN_SECONDS) return [];
+  const count = Math.ceil(total / GEMINI_EDIT_MAX_SECONDS);
+  const base = total / count;
+  return Array.from({ length: count }, () => base);
+}
+
+/** Public tier facts. The site, the MCP tool and the quote all read from here. */
+export const TIER_INFO = Object.freeze({
+  free: Object.freeze({
+    id: 'free',
+    usdPer30s: 0,
+    swaps: false,
+    dubRequired: true,
+    watermark: false,
+    runsOn: 'mac-mini',
+    voice: 'local Saudi TTS (Edge TTS ar-SA, or NAMAA-Saudi-TTS when installed)',
+    lipsync: 'MuseTalk 1.5 (local, MIT)',
+    swapEngine: null,
+    turnaround: 'queued on the Mac mini; minutes per clip once it starts',
+  }),
+  economy: Object.freeze({
+    id: 'economy',
+    usdPer30s: 30 * GEMINI_EDIT_USD_PER_SEC,
+    swaps: true,
+    dubRequired: false,
+    watermark: false,
+    runsOn: 'gemini-api + mac-mini',
+    voice: 'local Saudi TTS (Edge TTS ar-SA, or NAMAA-Saudi-TTS when installed)',
+    lipsync: 'MuseTalk 1.5 (local, MIT)',
+    swapEngine: GEMINI_EDIT_MODEL,
+    turnaround: 'about 1–3 minutes per 15 s clip for swaps, then the Mac queue',
+  }),
+  pro: Object.freeze({
+    id: 'pro',
+    usdPer30s: 30 * 0.28 + 30 * 0.025,
+    swaps: true,
+    dubRequired: false,
+    watermark: false,
+    runsOn: 'aleph2 + heygen',
+    voice: 'HeyGen Precision, Arabic (Saudi Arabia)',
+    lipsync: 'HeyGen Precision',
+    swapEngine: 'aleph2',
+    turnaround: 'minutes',
+  }),
 });
 
 export const SWAP_KINDS = Object.freeze(['character', 'outfit', 'product', 'background']);
@@ -185,11 +254,45 @@ export function estimateLocalizeCost({
   swaps = [],
   swapCount,
   dub = false,
+  tier = DEFAULT_TIER,
   maxUsd,
   env = process.env,
 } = {}) {
   const list = Array.isArray(swaps) ? swaps : [];
   const count = list.length || Number(swapCount) || 0;
+  const capUsdFor = () => (maxUsd === undefined ? localizeMaxUsd(env) : maxUsd);
+  if (tier === 'free' || tier === 'economy') {
+    const segments = tier === 'economy' && count > 0 ? geminiSegments(seconds) : [];
+    const swapsAllowed = tier === 'economy';
+    // One Gemini edit per segment carries all swaps in one prompt.
+    const geminiUsd = segments.length ? Number(seconds) * GEMINI_EDIT_USD_PER_SEC : 0;
+    const capUsd = capUsdFor();
+    const durationSupported = !(count > 0 && swapsAllowed && segments.length === 0);
+    return Object.freeze({
+      currency: 'USD',
+      tier,
+      estimateUsd: geminiUsd,
+      capUsd,
+      withinCap: durationSupported && (swapsAllowed || count === 0) && geminiUsd <= capUsd,
+      durationSupported,
+      swapsSupported: swapsAllowed,
+      alephGenerations: 0,
+      geminiSegments: segments.length,
+      heygen: false,
+      local: Object.freeze({ voice: Boolean(dub), lipsync: Boolean(dub), usd: 0 }),
+      language: dub ? 'ar-SA' : null,
+      breakdown: Object.freeze({
+        gemini: Object.freeze({
+          model: GEMINI_EDIT_MODEL,
+          resolution: GEMINI_EDIT_RESOLUTION,
+          segments: segments.length,
+          usdPerSecond: GEMINI_EDIT_USD_PER_SEC,
+          usd: geminiUsd,
+        }),
+        local: Object.freeze({ usd: 0 }),
+      }),
+    });
+  }
   const passes = list.length
     ? packAlephPasses(list)
     : (count > 0 ? packAlephPasses(Array.from({ length: count }, () => ({ kind: 'background', preset: 'alula' }))) : []);
@@ -200,6 +303,7 @@ export function estimateLocalizeCost({
   const durationSupported = !(passes.length && (seconds < ALEPH_MIN_SECONDS || seconds > ALEPH_MAX_SECONDS));
   return Object.freeze({
     currency: 'USD',
+    tier: 'pro',
     estimateUsd,
     capUsd,
     withinCap: durationSupported && estimateUsd <= capUsd,
@@ -232,6 +336,7 @@ export function costForJob(job, env = process.env) {
     seconds: job.seconds,
     swaps: localize.swaps || [],
     dub: Boolean(localize.dub),
+    tier: localize.tier || DEFAULT_TIER,
     env,
   });
 }

@@ -3,7 +3,7 @@ import { FORMATS, LANGUAGES, SECONDS } from './constants.js';
 import { ApiError } from './errors.js';
 import { findStyle, pixelSize } from './styles.js';
 import { assertPublicHttps } from './ssrf.js';
-import { DIALECTS, MAX_SWAPS, SWAP_KINDS, SWAP_PRESETS } from './engines/localize.js';
+import { DEFAULT_TIER, DIALECTS, MAX_SWAPS, SWAP_KINDS, SWAP_PRESETS, TIERS } from './engines/localize.js';
 
 const REFERENCE_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/;
@@ -247,9 +247,13 @@ function readLocalize(value, check) {
     return null;
   }
   for (const key of Object.keys(value)) {
-    if (!['source', 'swaps', 'captions', 'dub', 'consent'].includes(key)) check.add(`localize.${key}`, 'unknown');
+    if (!['tier', 'source', 'swaps', 'captions', 'dub', 'consent'].includes(key)) check.add(`localize.${key}`, 'unknown');
   }
-  const out = { source: null, swaps: [], captions: null, dub: false, consent: { likeness: false } };
+  const out = { tier: DEFAULT_TIER, source: null, swaps: [], captions: null, dub: false, consent: { likeness: false } };
+  if (value.tier !== undefined) {
+    if (!TIERS.includes(value.tier)) check.add('localize.tier', 'enum');
+    else out.tier = value.tier;
+  }
 
   if (!plainObject(value.source)) check.add('localize.source', 'required');
   else {
@@ -335,5 +339,14 @@ function readLocalize(value, check) {
   if (touchesPeople && !out.consent.likeness) check.add('localize.consent.likeness', 'required');
 
   if (out.swaps.length === 0 && !out.captions && !out.dub) check.add('localize.swaps', 'required');
+  // Free runs on the Mac mini only: Saudi voice + lip-sync, no visual swaps.
+  if (out.tier === 'free') {
+    if (out.swaps.length > 0) check.add('localize.swaps', 'tier_unsupported');
+    if (!out.dub) check.add('localize.dub', 'required');
+  }
+  // Gemini video edit takes at most two reference images.
+  if (out.tier === 'economy' && out.swaps.filter((swap) => swap.referenceUrl).length > 2) check.add('localize.swaps', 'too_many_references');
+  // Free and economy speak a script locally (no machine translation), so the Saudi line must be given.
+  if (out.tier !== 'pro' && out.dub && out.captions && !out.captions.text) check.add('localize.captions.text', 'required');
   return out;
 }

@@ -333,3 +333,19 @@ s.was { opacity: .5; font-weight: 600; font-size: .55em; text-decoration-thickne
 .addon[data-invalid='true'] { border-color: var(--coral); }
 .ads-submit { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .ads-note { font-size: 13px; color: var(--muted); }
+.ads-tiers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+.ads-tier { padding: 28px; border-radius: 28px; background: #fff; border: 2px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+.ads-tier[data-tier='pro'] { border-color: var(--ink, #111); }
+.ads-tier h3 { font-size: 26px; font-weight: 800; }
+.ads-tier-price { font-size: 18px; font-weight: 700; }
+.ads-tier dl { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.ads-tier dt { font-size: 13px; color: var(--muted); }
+.ads-tier dd { margin: 0; line-height: 1.7; }
+.ads-tier-pick { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.ads-tier-pick legend { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+.ads-tier-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.ads-tier-option { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border: 2px solid var(--line); border-radius: 18px; cursor: pointer; }
+.ads-tier-option[data-checked='true'] { border-color: var(--ink, #111); background: var(--paper, #fafaf5); }
+.ads-tier-option input { position: absolute; opacity: 0; pointer-events: none; }
+.ads-tier-option span { font-size: 14px; color: var(--muted); }
+.ads-tier-option:focus-within { outline: 2px solid var(--lime, #c6f432); outline-offset: 2px; }

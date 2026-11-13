@@ -2,7 +2,7 @@ import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import AdsForm from '../../../components/AdsForm';
 import { pageMeta } from '../../../lib/seo';
-import { adsCopy, adSwapKinds } from '../../../lib/ads';
+import { adsCopy, adSwapKinds, adTiers } from '../../../lib/ads';
 
 export async function generateMetadata({ params }) {
   const { lang } = await params;
@@ -62,6 +62,32 @@ export default async function Ads({ params }) {
         <h2 className="h2">{c.rulesT}</h2>
         <ul className="ads-rules">
           {c.rules.map((r) => <li key={r}>{r}</li>)}
+        </ul>
+      </section>
+
+      <section id="tiers" className="wrap section" style={{ paddingTop: 0 }}>
+        <div className="section-head">
+          <h2 className="h2">{c.tiersT}</h2>
+          <p className="lead">{c.tiersS}</p>
+        </div>
+        <ul className="ads-tiers">
+          {adTiers.map((t) => {
+            const tc = t[lang] || t.ar;
+            return (
+              <li key={t.id} className="ads-tier" data-tier={t.id}>
+                <h3>{tc.name}</h3>
+                <p className="ads-tier-price">{tc.price}</p>
+                <dl>
+                  {['quality', 'swaps', 'turnaround', 'watermark'].map((k) => (
+                    <div key={k}>
+                      <dt>{c.tierRows[k]}</dt>
+                      <dd>{tc[k]}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </li>
+            );
+          })}
         </ul>
       </section>
 

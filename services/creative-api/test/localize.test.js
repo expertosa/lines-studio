@@ -51,7 +51,7 @@ test('localize is hidden and rejected until enabled', async () => {
     assert.equal(res.status, 422);
     assert.ok(hasDetail(res, 'style', 'enum'), details(res));
     const health = await api(ctx.app, 'GET', '/v1/health');
-    assert.deepEqual(health.json.engines.localize, { enabled: false, mode: 'pull', paidCalls: true, swapModel: 'aleph2', translateModel: 'heygen_precision' });
+    assert.deepEqual(health.json.engines.localize, { enabled: false, mode: 'pull', paidCalls: true, swapModel: 'aleph2', translateModel: 'heygen_precision', tiers: ['free', 'economy', 'pro'] });
   } finally {
     await ctx.close();
   }
@@ -220,4 +220,14 @@ test('the site form and MCP tool offer the same kinds, presets and dialects as t
   assert.deepEqual(adSwapKinds.map((k) => k.id), [...SWAP_KINDS]);
   assert.deepEqual(adDialects.map((d) => d.id), [...DIALECTS]);
   for (const kind of SWAP_KINDS) assert.deepEqual(adPresets[kind].map((p) => p.id), [...SWAP_PRESETS[kind]], kind);
+});
+
+test('the site and MCP tier table matches the API tier table', async () => {
+  const { adTiers } = await import('../../../lib/ads.js');
+  const { TIERS, TIER_INFO } = await import('../src/engines/localize.js');
+  assert.deepEqual(adTiers.map((t) => t.id), [...TIERS]);
+  for (const t of adTiers) {
+    assert.equal(t.usdPer30s, Number(TIER_INFO[t.id].usdPer30s.toFixed(2)), t.id);
+    assert.equal(t.swaps, TIER_INFO[t.id].swaps, t.id);
+  }
 });

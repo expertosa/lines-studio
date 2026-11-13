@@ -75,7 +75,7 @@ BLENDER_BIN=/Applications/Blender.app/Contents/MacOS/Blender node src/cli.js exa
 
 صفحة `/ar/ads/` («إعلانات» في القائمة): طلب نسخة سعودية من إعلان فيديو جاهز، بتبديل الشخصيات واللبس والمنتج والخلفية، مع ترجمة أو تعليق صوتي باللهجة. النموذج يجهّز رسالة واتساب مثل نموذج الطلب، والسعر حسب الطلب. تبديل الشخصيات أو الصوت ما يمشي إلا بتأكيد العميل إن عنده الحق. النصوص والخيارات في `lib/ads.js`، ونفسها تستخدمها أداة `request_ad_localization` في سيرفر MCP.
 
-وفي واجهة الفيديو فيه `style: "localize"` (مقفول افتراضياً بـ `LINES_ENABLE_LOCALIZE`). الواجهة تستقبل الطلب وتتأكد منه وتحفظه وتعرض تقدير التكلفة قبل التشغيل (سقف `LINES_LOCALIZE_MAX_USD`، الافتراضي 15 دولار). التنفيذ على عامل السحب في `services/localize-worker`: Runway Aleph 2.0 للتبديل البصري، ثم HeyGen Precision للترجمة إلى `Arabic (Saudi Arabia)` مع مزامنة الشفايف. ما فيه إطلاق ولا استدعاء مدفوع حي في هذا الفرع. التفاصيل في `services/creative-api/README.md`.
+وفي واجهة الفيديو فيه `style: "localize"` (مقفول افتراضياً بـ `LINES_ENABLE_LOCALIZE`). الواجهة تستقبل الطلب وتتأكد منه وتحفظه وتعرض تقدير التكلفة قبل التشغيل (سقف `LINES_LOCALIZE_MAX_USD`، الافتراضي 15 دولار). التنفيذ على عامل السحب في `services/localize-worker`: Runway Aleph 2.0 للتبديل البصري، ثم HeyGen Precision للترجمة إلى `Arabic (Saudi Arabia)` مع مزامنة الشفايف. ما فيه إطلاق ولا استدعاء مدفوع حي في هذا الفرع. وفيه ثلاث باقات بـ `localize.tier`: `free` (مجاني على الماك: صوت سعودي محلي ومزامنة شفايف MuseTalk، بدون تبديل)، و`economy` (تبديل Gemini Omni Flash بدقة 720p مع الصوت والشفايف المحلية، تقريبًا 2.10 دولار لكل 30 ثانية)، و`pro` (الافتراضي: Aleph مع HeyGen، تقريبًا 9.15 دولار). التفاصيل في `services/creative-api/README.md`.
 
 ## إضافة تصميم جديد للمعرض
 

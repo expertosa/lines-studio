@@ -75,6 +75,22 @@ assert.equal(r.isError, true, 'bad phone');
 r = await call('request_ad_localization', { business_name: 'x', phone: '0551234567', captions: false, dub: false });
 assert.equal(r.isError, true, 'nothing requested');
 
+r = await call('request_ad_localization', { tier: 'free', business_name: 'x', phone: '0551234567', swaps: [{ kind: 'background', preset: 'alula' }], likeness_consent: true });
+assert.equal(r.isError, true, 'free tier has no swaps');
+r = await call('request_ad_localization', { tier: 'free', business_name: 'x', phone: '0551234567', script: 'هلا والله', likeness_consent: true });
+assert.equal(r.isError, undefined, JSON.stringify(r.content));
+assert.equal(r.structuredContent.tier, 'free');
+assert.equal(r.structuredContent.price, 'بدون تكلفة');
+assert.equal(r.structuredContent.watermark, false);
+assert.match(r.structuredContent.message, /الباقة: مجاني/);
+assert.match(r.structuredContent.message, /الجملة: هلا والله/);
+r = await call('request_ad_localization', { tier: 'free', business_name: 'x', phone: '0551234567' });
+assert.equal(r.isError, true, 'free always dubs, so consent is needed');
+r = await call('request_ad_localization', { tier: 'economy', business_name: 'x', phone: '0551234567', swaps: [{ kind: 'background', preset: 'alula' }], lang: 'en' });
+assert.equal(r.structuredContent.price, 'About $2.10 per 30 seconds');
+r = await call('request_ad_localization', { business_name: 'x', phone: '0551234567', swaps: [{ kind: 'background', preset: 'alula' }] });
+assert.equal(r.structuredContent.tier, 'pro');
+
 const { prompts } = await client.listPrompts();
 assert.equal(prompts[0].name, 'arabic_landing_page');
 

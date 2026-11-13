@@ -315,3 +315,37 @@ s.was { opacity: .5; font-weight: 600; font-size: .55em; text-decoration-thickne
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .price span.now { font-size: inherit; font-weight: inherit; color: inherit; }
 .price > span:not(.now) { white-space: nowrap; }
+
+/* «إعلانات»: ad localization page */
+.ads-swaps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.ads-swap { padding: 28px; border-radius: 28px; background: #fff; border: 2px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.ads-swap h3 { font-size: 24px; font-weight: 800; }
+.ads-swap p { color: var(--muted); line-height: 1.8; }
+.ads-rules { margin: 0; padding-inline-start: 22px; display: flex; flex-direction: column; gap: 12px; max-width: 860px; font-size: 18px; line-height: 1.8; color: var(--muted); }
+.ads-form { display: flex; flex-direction: column; gap: 22px; max-width: 860px; background: #fff; border: 2px solid var(--line); border-radius: 28px; padding: 28px; }
+.ads-kinds { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.ads-kinds legend { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+.ads-kinds[data-invalid='true'] { outline: 2px solid var(--coral); outline-offset: 8px; border-radius: 12px; }
+.field select { font-family: inherit; font-size: 16px; padding: 12px 14px; border-radius: 12px; border: 1px solid #c5c5be; background: #fff; font-weight: 400; color: var(--ink); }
+.ads-preset { max-width: 360px; }
+.ads-dialect { flex-direction: row; align-items: center; gap: 10px; }
+.field-hint { font-size: 13px; font-weight: 400; color: var(--muted); }
+.addon[data-invalid='true'] { border-color: var(--coral); }
+.ads-submit { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.ads-note { font-size: 13px; color: var(--muted); }
+.ads-tiers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+.ads-tier { padding: 28px; border-radius: 28px; background: #fff; border: 2px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+.ads-tier[data-tier='pro'] { border-color: var(--ink, #111); }
+.ads-tier h3 { font-size: 26px; font-weight: 800; }
+.ads-tier-price { font-size: 18px; font-weight: 700; }
+.ads-tier dl { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.ads-tier dt { font-size: 13px; color: var(--muted); }
+.ads-tier dd { margin: 0; line-height: 1.7; }
+.ads-tier-pick { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.ads-tier-pick legend { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+.ads-tier-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.ads-tier-option { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border: 2px solid var(--line); border-radius: 18px; cursor: pointer; }
+.ads-tier-option[data-checked='true'] { border-color: var(--ink, #111); background: var(--paper, #fafaf5); }
+.ads-tier-option input { position: absolute; opacity: 0; pointer-events: none; }
+.ads-tier-option span { font-size: 14px; color: var(--muted); }
+.ads-tier-option:focus-within { outline: 2px solid var(--lime, #c6f432); outline-offset: 2px; }

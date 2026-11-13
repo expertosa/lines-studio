@@ -101,6 +101,18 @@ The in-process template worker only claims `engine: "template"`. MoneyPrinter jo
 
 `style: "ugc"` (engine `ugc`) is a selfie-style testimonial: a fixed presenter speaks `script.text` (required) with lip sync. It is listed only when `LINES_ENABLE_UGC=1` and claimed by a worker key with `--engines ugc`. Format `9:16` only, `seconds` 15 or 30, `voice` is always `"presenter"`, `metadata.presenter` picks the presenter. The worker makes paid vendor calls (ElevenLabs, fal.ai); this API still makes none. See `services/ugc-worker/README.md`.
 
+`style: "localize"` (engine `localize`) is ad localization: a Saudi version of an existing video ad. The body carries `localize` instead of `prompt`: `source.url` (public https MP4), up to 30 `swaps` (`kind` `character` | `outfit` | `product` | `background`, with a `preset`, a free-text `target`, or a public https `referenceUrl`), `captions` (`dialect` `najdi` | `hijazi` | `janoubi` | `sharqawi` | `white`, optional `text`), `dub` (needs a dialect), and `consent.likeness`. A character swap or a dub is rejected without `consent.likeness: true`. The source and reference links get the same public-address check as callbacks. The style is listed only when `LINES_ENABLE_LOCALIZE=1`, and only a worker key with `--engines localize` can claim it; the claimed job carries `localize` and a duration-based `cost` estimate. `/v1/quote` for this style also returns `cost` (optional `swaps` and `dub` query params; defaults are 1 swap and dub on). The localize worker (`services/localize-worker`) runs paid calls: Runway Aleph 2.0 (`POST /v1/video_to_video`, model `aleph2`) applies the visual swaps, then HeyGen Video Translation Precision (`POST /v3/video-translations`, `mode: "precision"`, `output_languages: ["Arabic (Saudi Arabia)"]`) dubs and lip-syncs when `dub` is true. This API process still makes none of those calls. Jobs over `LINES_LOCALIZE_MAX_USD` (default 15) fail with `cost_cap_exceeded` before any vendor call. Missing `RUNWAY_API_KEY` / `HEYGEN_API_KEY` fail with `engine_not_configured`. Keep the flag off in production until keys, credit and a deploy are approved.
+
+**Tiers** (`localize.tier`, and `tier` on `/v1/quote`; default `pro`, the pipeline above):
+
+| Tier | Swaps | Voice + lip-sync | Est. per 30 s | Watermark | Needs |
+|---|---|---|---|---|---|
+| `free` | rejected (`tier_unsupported`) | local on the Mac: Edge TTS `ar-SA` (already used by MoneyPrinterTurbo) or NAMAA-Saudi-TTS, then MuseTalk 1.5 | $0 | none | `LINES_EDGE_TTS_BIN` or `LINES_NAMAA_TTS_CMD`, `LINES_MUSETALK_CMD` |
+| `economy` | Gemini Omni 1.2 Flash video edit, 720p, clips of 3–15 s, ≤ 2 reference images | same local voice + MuseTalk | about $2.10 ($0.07/s) | none | `GEMINI_VERTEX_PROJECT`, `GEMINI_GCS_BUCKET`, Google access token, plus the local tools |
+| `pro` | Runway Aleph 2.0 | HeyGen Precision, `Arabic (Saudi Arabia)` | about $9.15 | none | `RUNWAY_API_KEY`, `HEYGEN_API_KEY` |
+
+`free` requires `dub: true`; `free` and `economy` speak `captions.text` as written (no machine translation), so it is required with `dub`. Any missing key or local tool fails the job with `engine_not_configured` before work starts. The spec is stored in the nullable `localize_json` column, added on startup to an existing database; back up the data volume before the first deploy that includes it.
+
 ## Single instance
 
 The data directory has one writer. The process holds a SQLite reserved lock on `worker.lock` and a heartbeat in `worker.leader.json` (hostname, pid, timestamp). The kernel releases the lock when the process dies, including SIGKILL, so a new container is not blocked by a file that says PID 1 (that pid is alive inside every container). A leftover text lock from the previous build is ignored once it is older than 15 seconds.
@@ -114,6 +126,7 @@ LINES_DATA_DIR=/data node src/keys-cli.js create-app --tenant experto-web
 LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-mini --engines moneyprinter
 LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-blender --engines blender
 LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id ugc-worker --engines ugc
+LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id localize-worker --engines localize
 LINES_DATA_DIR=/data node src/keys-cli.js rotate-key --id experto-web
 LINES_DATA_DIR=/data node src/keys-cli.js rotate-webhook --tenant experto-web
 LINES_DATA_DIR=/data node src/keys-cli.js revoke --id experto-web

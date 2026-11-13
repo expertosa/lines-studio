@@ -65,9 +65,21 @@ paths:
         - name: language
           in: query
           schema: { $ref: "#/components/schemas/Language" }
+        - name: tier
+          in: query
+          description: Style `localize` only. free | economy | pro (default pro). free rejects swaps > 0.
+          schema: { type: string, enum: [free, economy, pro] }
+        - name: swaps
+          in: query
+          description: Style `localize` only. Number of swaps, 0–30 (default 1).
+          schema: { type: integer, minimum: 0, maximum: 30 }
+        - name: dub
+          in: query
+          description: Style `localize` only. Dub with lip-sync (default true; always true on free).
+          schema: { type: string, enum: ["1", "0", "true", "false"] }
       responses:
         "200":
-          description: Included in the Experto plan until a paid engine is configured
+          description: Included in the Experto plan until a paid engine is configured. Style `localize` adds `tier`, `tierInfo` and a USD `cost` estimate.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Quote" }
@@ -382,6 +394,54 @@ components:
         metadata:
           type: object
           additionalProperties: true
+        localize: { $ref: "#/components/schemas/Localize" }
+    Localize:
+      type: object
+      additionalProperties: false
+      description: >-
+        Required for style `localize` (listed only when LINES_ENABLE_LOCALIZE=1), rejected for other styles.
+        Needs at least one of swaps, captions, dub. A character swap or a dub needs consent.likeness=true.
+        `tier` picks the pipeline (default `pro`). pro: Runway Aleph 2.0 swaps + HeyGen Precision (`Arabic (Saudi Arabia)`) dub with lip-sync, about $9.15 per 30 s.
+        economy: Gemini Omni 1.2 Flash video edit at 720p for swaps ($0.07/s, the ad is cut into clips of 3–15 s, at most two referenceUrl images), then local Saudi voice + MuseTalk lip-sync on the Mac, about $2.10 per 30 s.
+        free: $0 on the Mac only, local Saudi voice + MuseTalk lip-sync; swaps are rejected (`tier_unsupported`) and dub is required.
+        free and economy dubs speak captions.text as given (no machine translation), so it is required when dub is true. No tier adds a watermark.
+        Jobs include a duration-based cost estimate and are refused when they exceed LINES_LOCALIZE_MAX_USD (default 15). Missing keys or local tools fail with `engine_not_configured`.
+      required: [source]
+      properties:
+        tier: { type: string, enum: [free, economy, pro], default: pro }
+        source:
+          type: object
+          required: [url]
+          properties:
+            url: { type: string, format: uri, description: "Public https link to the source ad (MP4)" }
+        swaps:
+          type: array
+          maxItems: 30
+          items:
+            type: object
+            required: [kind]
+            description: Needs preset, target or referenceUrl.
+            properties:
+              kind: { type: string, enum: [character, outfit, product, background] }
+              preset:
+                type: string
+                description: >-
+                  character: saudi-man, saudi-woman, saudi-family, saudi-youth.
+                  outfit: thobe-shemagh, thobe-ghutra, abaya, saudi-casual, saudi-sport.
+                  background: riyadh-boulevard, riyadh-kafd, jeddah-corniche, alula, abha, saudi-home-majlis, saudi-cafe.
+              target: { type: string, maxLength: 200 }
+              referenceUrl: { type: string, format: uri, description: "Public https reference image" }
+        captions:
+          type: object
+          required: [dialect]
+          properties:
+            dialect: { type: string, enum: [najdi, hijazi, janoubi, sharqawi, white] }
+            text: { type: string, maxLength: 2000 }
+        dub: { type: boolean, description: "Saudi-dialect voice-over; needs captions.dialect" }
+        consent:
+          type: object
+          properties:
+            likeness: { type: boolean, description: "Caller holds the rights to change people and voices in this ad" }
     JobAccepted:
       type: object
       required: [id, status]
@@ -400,12 +460,13 @@ components:
         language: { $ref: "#/components/schemas/Language" }
         seconds: { type: integer }
         voice: { type: string }
-        engine: { type: string, enum: [moneyprinter, template, external, blender, ugc] }
+        engine: { type: string, enum: [moneyprinter, template, external, blender, ugc, localize] }
         endUserId: { type: string, nullable: true }
         prompt: { type: string, nullable: true }
         script: { type: object, nullable: true }
         metadata: { type: object }
         callbackUrl: { type: string, nullable: true }
+        localize: { $ref: "#/components/schemas/Localize" }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         deadlineAt: { type: string, format: date-time }
@@ -444,6 +505,7 @@ components:
         seconds: { type: integer }
         voice: { type: string, description: "Edge TTS voice, or \"presenter\" for ugc (the presenter's own voice)" }
         metadata: { type: object, additionalProperties: true, description: "Caller metadata; workers read render options from it (promo3d palette/hero, ugc presenter)" }
+        localize: { allOf: [{ $ref: "#/components/schemas/Localize" }], nullable: true }
         engine: { type: string }
         width: { type: integer }
         height: { type: integer }
@@ -461,6 +523,13 @@ components:
         currency: { type: string, example: SAR }
         amount: { type: number, example: 0 }
         includedInPlan: { type: boolean }
+        tier: { type: string, enum: [free, economy, pro], description: "localize only" }
+        tierInfo:
+          type: object
+          description: "localize only: usdPer30s, swaps, watermark (always false), runsOn, voice, lipsync, swapEngine, turnaround"
+        cost:
+          type: object
+          description: "localize only: USD estimate (estimateUsd, capUsd, withinCap, durationSupported, breakdown)"
     Usage:
       type: object
       properties:

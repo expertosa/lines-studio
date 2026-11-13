@@ -11,6 +11,7 @@ import { artifactSignature, signaturesEqual } from './sign.js';
 import { listStyles } from './styles.js';
 import { blenderEngine } from './engines/blender.js';
 import { ugcEngine } from './engines/ugc.js';
+import { DEFAULT_TIER, TIERS, TIER_INFO, estimateLocalizeCost, localizeEngine } from './engines/localize.js';
 import { validateJob } from './validate.js';
 import { clientIp } from './auth-limit.js';
 
@@ -53,6 +54,7 @@ function styleOptions(ctx) {
     enableTemplate: ctx.enableTemplate,
     enableBlender: ctx.enableBlender,
     enableUgc: ctx.enableUgc,
+    enableLocalize: ctx.enableLocalize,
     defaultEngine: ctx.defaultEngine,
   };
 }
@@ -208,6 +210,14 @@ async function health(req, res, ctx) {
       },
       blender: { enabled: Boolean(ctx.enableBlender), mode: blenderEngine.mode, macRequired: blenderEngine.macRequired },
       ugc: { enabled: Boolean(ctx.enableUgc), mode: ugcEngine.mode, paidCalls: ugcEngine.paidCalls },
+      localize: {
+        enabled: Boolean(ctx.enableLocalize),
+        mode: localizeEngine.mode,
+        paidCalls: localizeEngine.paidCalls,
+        swapModel: localizeEngine.swapModel,
+        translateModel: localizeEngine.translateModel,
+        tiers: TIERS.slice(),
+      },
       external: { configured: false },
     },
   });
@@ -221,7 +231,7 @@ async function styles(req, res, ctx) {
 async function quote(req, res, ctx) {
   assertApp(req, ctx.store, 'jobs:read');
   const url = pathname(req);
-  const allowed = new Set(['seconds', 'style', 'format', 'language']);
+  const allowed = new Set(['seconds', 'style', 'format', 'language', 'swaps', 'dub', 'tier']);
   for (const key of url.searchParams.keys()) {
     if (!allowed.has(key)) {
       throw new ApiError(422, 'validation_error', 'Query is invalid.', [{ path: key, code: 'unknown' }]);
@@ -238,7 +248,14 @@ async function quote(req, res, ctx) {
       { path: 'seconds', code: 'enum' },
     ]);
   }
-  send(res, 200, {
+  if (style.engine !== 'localize') {
+    for (const key of ['swaps', 'dub', 'tier']) {
+      if (url.searchParams.has(key)) {
+        throw new ApiError(422, 'validation_error', 'Query is invalid.', [{ path: key, code: 'unknown' }]);
+      }
+    }
+  }
+  const body = {
     style: style.id,
     seconds,
     format,
@@ -248,7 +265,29 @@ async function quote(req, res, ctx) {
     currency: 'SAR',
     amount: 0,
     includedInPlan: true,
-  });
+  };
+  if (style.engine === 'localize') {
+    const swapsRaw = url.searchParams.get('swaps');
+    const swapCount = swapsRaw == null || swapsRaw === '' ? 1 : Number(swapsRaw);
+    const dubRaw = url.searchParams.get('dub');
+    const dub = dubRaw == null || dubRaw === '' ? true : !['0', 'false', 'no'].includes(String(dubRaw).toLowerCase());
+    if (!Number.isInteger(swapCount) || swapCount < 0 || swapCount > 30) {
+      throw new ApiError(422, 'validation_error', 'Quote is invalid.', [{ path: 'swaps', code: 'enum' }]);
+    }
+    const tierRaw = url.searchParams.get('tier');
+    const tier = tierRaw == null || tierRaw === '' ? DEFAULT_TIER : tierRaw;
+    if (!TIERS.includes(tier)) {
+      throw new ApiError(422, 'validation_error', 'Quote is invalid.', [{ path: 'tier', code: 'enum' }]);
+    }
+    if (tier === 'free' && swapsRaw != null && swapsRaw !== '' && swapCount > 0) {
+      throw new ApiError(422, 'validation_error', 'Quote is invalid.', [{ path: 'swaps', code: 'tier_unsupported' }]);
+    }
+    const effectiveSwaps = tier === 'free' ? 0 : swapCount;
+    body.tier = tier;
+    body.tierInfo = TIER_INFO[tier];
+    body.cost = estimateLocalizeCost({ seconds, swapCount: effectiveSwaps, dub: tier === 'free' ? true : dub, tier });
+  }
+  send(res, 200, body);
 }
 
 async function createJob(req, res, ctx) {

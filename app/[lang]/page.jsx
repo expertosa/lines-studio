@@ -158,7 +158,7 @@ export default async function Home({ params }) {
               place="video-card"
               heading="h3"
             />
-            {works.map((item) => (
+            {works.map((item, index) => (
               <VideoCard
                 key={item.id}
                 title={item.name[lang]}
@@ -166,15 +166,20 @@ export default async function Home({ params }) {
                 category={workCategories.find((cat) => cat.id === item.cat)?.[lang]}
                 alt={item.alt[lang]}
                 image={item.image}
-                fit="contain"
+                video={item.video}
+                poster={item.poster}
+                fit={item.video ? 'cover' : 'contain'}
                 ctaHref={`${wa}?text=${encodeURIComponent(d.work.likeWa(item.name[lang]))}`}
                 ctaLabel={d.work.like}
                 visitHref={item.url}
                 visitLabel={d.work.visit}
                 visitHint={lang === 'ar' ? '(يفتح في تبويب جديد)' : '(opens in a new tab)'}
+                soundOn={d.video.unmute}
+                soundOff={d.video.mute}
                 detailsLabel={d.work.details}
                 place="video-work"
                 heading="h3"
+                defer={index > 1}
               />
             ))}
           </VideoSwiper>

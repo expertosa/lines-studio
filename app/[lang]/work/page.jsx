@@ -21,12 +21,14 @@ export default async function Work({ params }) {
   return (
     <>
       <Header lang={lang} path="work/" />
-      <main className="wrap" style={{ display: 'flex', flexDirection: 'column', gap: 28, paddingBottom: 80 }}>
-        <div className="page-head">
-          <h1>{d.work.pageTitle}</h1>
-          <p>{d.work.pageSub}</p>
+      <main className="work-stage">
+        <div className="wrap work-stage-inner">
+          <div className="page-head">
+            <h1>{d.work.pageTitle}</h1>
+            <p>{d.work.pageSub}</p>
+          </div>
+          <WorkGrid lang={lang} />
         </div>
-        <WorkGrid lang={lang} />
       </main>
       <Footer lang={lang} />
     </>

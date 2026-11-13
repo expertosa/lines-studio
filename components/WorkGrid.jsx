@@ -1,14 +1,18 @@
 'use client';
 
 import { useState } from 'react';
+import VideoCard from './VideoCard';
 import { workCategories, works } from '../lib/work';
 import { t } from '../lib/dict';
+import { site } from '../lib/site';
 
 export default function WorkGrid({ lang }) {
   const d = t(lang);
   const [cat, setCat] = useState('all');
   const shown = works.filter((item) => cat === 'all' || item.cat === cat);
   const catLabel = (id) => workCategories.find((item) => item.id === id)?.[lang];
+  const wa = `https://wa.me/${site.whatsapp}`;
+  const visitHint = lang === 'ar' ? '(يفتح في تبويب جديد)' : '(opens in a new tab)';
 
   return (
     <>
@@ -19,24 +23,35 @@ export default function WorkGrid({ lang }) {
           </button>
         ))}
       </div>
-      <p style={{ color: 'var(--muted)' }} aria-live="polite">{d.work.count(shown.length)}</p>
+      <p className="work-count" aria-live="polite">{d.work.count(shown.length)}</p>
       {shown.length === 0 && <p className="placeholder">{d.work.empty}</p>}
-      <div className="work-grid">
-        {shown.map((item) => (
-          <article key={item.id} id={item.id} className="wcard">
-            <img src={item.image} alt={item.alt[lang]} width={800} height={500} loading="lazy" decoding="async" />
-            <div className="wcard-body">
-              <div className="wcard-head">
-                <h2>{item.name[lang]}</h2>
-                <span className="cat">{catLabel(item.cat)}</span>
-              </div>
-              <p>{item.desc[lang]}</p>
-              <a className="btn btn-lime" href={item.url} target="_blank" rel="noopener noreferrer">
-                {d.work.visit}
-                <span className="sr">{lang === 'ar' ? '(يفتح في تبويب جديد)' : '(opens in a new tab)'}</span>
-              </a>
-            </div>
-          </article>
+      <div className="vgrid">
+        {shown.map((item, index) => (
+          <VideoCard
+            key={item.id}
+            id={item.id}
+            title={item.name[lang]}
+            description={item.desc[lang]}
+            category={catLabel(item.cat)}
+            alt={item.alt[lang]}
+            image={item.image}
+            video={item.video}
+            poster={item.poster}
+            fit={item.video ? 'cover' : 'contain'}
+            ctaHref={`${wa}?text=${encodeURIComponent(d.work.likeWa(item.name[lang]))}`}
+            ctaLabel={d.work.like}
+            visitHref={item.url}
+            visitLabel={d.work.visit}
+            visitHint={visitHint}
+            soundOn={d.video.unmute}
+            soundOff={d.video.mute}
+            detailsLabel={d.work.details}
+            place="work-card"
+            heading="h2"
+            eager={index === 0}
+            priority={index === 0}
+            defer={index > 1}
+          />
         ))}
       </div>
     </>

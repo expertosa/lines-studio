@@ -4,7 +4,9 @@ import Footer from '../../components/Footer';
 import { t } from '../../lib/dict';
 import { site } from '../../lib/site';
 import { pageMeta } from '../../lib/seo';
-import { featuredWorks } from '../../lib/work';
+import { featuredWorks, launchVideo, workCategories, works } from '../../lib/work';
+import VideoCard from '../../components/VideoCard';
+import VideoSwiper from '../../components/VideoSwiper';
 import { socialCopy } from '../../lib/social';
 import Price, { offerBadge, todayFmt } from '../../components/Price';
 import { launchOffer, promoText } from '../../lib/promo';
@@ -135,26 +137,58 @@ export default async function Home({ params }) {
 
       <section id="video" className="dark">
         <div className="wrap section video-band">
-          <figure className="video-sample">
-            <video src="/video/launch-3d-ar.mp4" poster="/video/launch-3d-ar.webp" width={720} height={1280} muted loop playsInline autoPlay preload="metadata" aria-label={d.video.sample} />
-            <figcaption>{d.video.sample}</figcaption>
-          </figure>
           <div className="video-copy">
             <span className="pill">{d.video.tag}</span>
             <h2 className="h2">{d.video.title}</h2>
             <p className="lead">{d.video.sub}</p>
-            <div className="video-items">
-              {d.video.items.map((v, i) => (
-                <div key={v.name} className={`video-item video-item-${i + 1}`}>
-                  <h3>{v.name}</h3>
-                  <p>{v.desc}</p>
-                  <span>{v.note}</span>
-                </div>
-              ))}
-            </div>
-            <p className="video-price">{d.video.price}</p>
-            <a className="btn btn-lime" href={`${wa}?text=${encodeURIComponent(d.video.wa)}`} data-umami-event="whatsapp" data-umami-event-place="video">{d.video.cta}</a>
           </div>
+          <VideoSwiper label={d.video.swiper} prevLabel={d.video.prev} nextLabel={d.video.next}>
+            <VideoCard
+              title={d.video.sample}
+              description={d.video.items[0].desc}
+              alt={d.video.sample}
+              poster={launchVideo.poster}
+              video={launchVideo.src}
+              fit="cover"
+              ctaHref={`${wa}?text=${encodeURIComponent(d.video.wa)}`}
+              ctaLabel={d.video.cta}
+              soundOn={d.video.unmute}
+              soundOff={d.video.mute}
+              detailsLabel={d.video.details}
+              place="video-card"
+              heading="h3"
+            />
+            {works.map((item) => (
+              <VideoCard
+                key={item.id}
+                title={item.name[lang]}
+                description={item.desc[lang]}
+                category={workCategories.find((cat) => cat.id === item.cat)?.[lang]}
+                alt={item.alt[lang]}
+                image={item.image}
+                fit="contain"
+                ctaHref={`${wa}?text=${encodeURIComponent(d.work.likeWa(item.name[lang]))}`}
+                ctaLabel={d.work.like}
+                visitHref={item.url}
+                visitLabel={d.work.visit}
+                visitHint={lang === 'ar' ? '(يفتح في تبويب جديد)' : '(opens in a new tab)'}
+                detailsLabel={d.work.details}
+                place="video-work"
+                heading="h3"
+              />
+            ))}
+          </VideoSwiper>
+          <div className="video-items">
+            {d.video.items.map((v, i) => (
+              <div key={v.name} className={`video-item video-item-${i + 1}`}>
+                <h3>{v.name}</h3>
+                <p>{v.desc}</p>
+                <span>{v.note}</span>
+              </div>
+            ))}
+          </div>
+          <p className="video-price">{d.video.price}</p>
+          <a className="btn btn-lime" href={`${wa}?text=${encodeURIComponent(d.video.wa)}`} data-umami-event="whatsapp" data-umami-event-place="video">{d.video.cta}</a>
         </div>
       </section>
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { FORMATS, LANGUAGES, SECONDS } from './constants.js';
 import { ApiError } from './errors.js';
+import { assertShowcaseImageUrl } from './image-url.js';
 import { findStyle, pixelSize } from './styles.js';
 import { assertPublicHttps } from './ssrf.js';
 
@@ -52,7 +53,8 @@ export async function validateJob(body, options) {
     ]);
   }
   const allowed = new Set([
-    'reference', 'title', 'prompt', 'script', 'style', 'format', 'language', 'seconds', 'voice', 'callbackUrl', 'metadata',
+    'reference', 'title', 'prompt', 'script', 'style', 'format', 'language', 'seconds', 'voice',
+    'subtitles', 'voiceover', 'imageUrl', 'callbackUrl', 'metadata',
   ]);
   for (const key of Object.keys(body)) {
     if (!allowed.has(key)) check.add(key, 'unknown');
@@ -73,13 +75,14 @@ export async function validateJob(body, options) {
   if (body.script !== undefined) {
     script = readScript(body.script, check);
   }
-  if (!prompt && !script?.text) check.add('prompt', 'required');
   const style = typeof body.style === 'string' ? findStyle(body.style, options) : null;
   if (!style) check.add('style', 'enum');
+  if (!(style?.requiresImage) && !prompt && !script?.text) check.add('prompt', 'required');
   if (typeof body.format !== 'string' || !FORMATS.includes(body.format)) check.add('format', 'enum');
   if (typeof body.language !== 'string' || !LANGUAGES.includes(body.language)) check.add('language', 'enum');
-  if (!SECONDS.includes(body.seconds)) check.add('seconds', 'enum');
+  if (!Number.isInteger(body.seconds)) check.add('seconds', 'enum');
   else if (style && !style.seconds.includes(body.seconds)) check.add('seconds', 'enum');
+  else if (!style && !SECONDS.includes(body.seconds)) check.add('seconds', 'enum');
   if (style && typeof body.format === 'string' && FORMATS.includes(body.format) && !style.formats.includes(body.format)) {
     check.add('format', 'enum');
   }
@@ -92,6 +95,18 @@ export async function validateJob(body, options) {
     else voice = body.voice;
   } else if (body.voice !== undefined && typeof body.voice !== 'string') {
     check.add('voice', 'format');
+  }
+  const subtitles = readFlag(body.subtitles, 'subtitles', check, false);
+  const voiceover = readFlag(body.voiceover, 'voiceover', check, style?.requiresImage ? false : true);
+  if (style?.requiresImage && body.subtitles === true) check.add('subtitles', 'unsupported');
+  if (style?.requiresImage && body.voiceover === true) check.add('voiceover', 'unsupported');
+  let imageUrl = null;
+  if (body.imageUrl !== undefined) {
+    if (typeof body.imageUrl !== 'string') check.add('imageUrl', 'type');
+    else if (!style?.requiresImage) check.add('imageUrl', 'unexpected');
+    else imageUrl = body.imageUrl.trim();
+  } else if (style?.requiresImage) {
+    check.add('imageUrl', 'required');
   }
   let callbackUrl = null;
   if (body.callbackUrl !== undefined) {
@@ -110,8 +125,13 @@ export async function validateJob(body, options) {
     });
     checkedUrl = result.href;
   }
+  if (imageUrl) {
+    imageUrl = assertShowcaseImageUrl(imageUrl, { hosts: options.imageHosts }).href;
+  }
   const engine = style.engine;
   const size = pixelSize(engine, body.format);
+  const effectiveSubtitles = style?.requiresImage ? false : subtitles;
+  const effectiveVoiceover = style?.requiresImage ? false : voiceover;
   const canonical = {
     reference: body.reference,
     title: body.title.trim(),
@@ -125,13 +145,29 @@ export async function validateJob(body, options) {
     callbackUrl: checkedUrl,
     metadata,
   };
+  // Defaults stay out of the hash so a body from before these fields still replays.
+  if (effectiveSubtitles) canonical.subtitles = true;
+  if (!effectiveVoiceover) canonical.voiceover = false;
+  if (imageUrl) canonical.imageUrl = imageUrl;
   return {
     ...canonical,
+    subtitles: effectiveSubtitles,
+    voiceover: effectiveVoiceover,
+    imageUrl,
     engine,
     width: size.width,
     height: size.height,
     requestHash: requestHash(canonical),
   };
+}
+
+function readFlag(value, path, check, fallback) {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'boolean') {
+    check.add(path, 'type');
+    return fallback;
+  }
+  return value;
 }
 
 function readScript(value, check) {

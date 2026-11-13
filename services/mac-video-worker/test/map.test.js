@@ -26,6 +26,20 @@ test('maps an Arabic promo onto Pixabay and Edge TTS', () => {
   assert.equal(body.video_script_prompt, 'منتج جديد');
   assert.match(body.custom_system_prompt, /اكسبرتو/);
   assert.equal(body.font_name, 'NotoNaskhArabic-Regular.ttf');
+  assert.equal(body.subtitle_enabled, false);
+  assert.equal(body.bgm_type, 'random');
+});
+
+test('subtitles stay off unless the job asks, and voiceover false skips TTS', () => {
+  const burned = toMoneyPrinter({ ...job, subtitles: true });
+  assert.equal(burned.subtitle_enabled, true);
+  assert.equal(burned.voice_name, 'ar-SA-HamedNeural');
+  const muted = toMoneyPrinter({ ...job, voiceover: false, subtitles: false });
+  assert.equal(muted.subtitle_enabled, false);
+  assert.equal(muted.voice_name, 'no-voice');
+  assert.equal(muted.voice_volume, 0);
+  assert.equal(muted.bgm_type, '');
+  assert.equal(muted.bgm_volume, 0);
 });
 
 test('a supplied script is the narration and skips the LLM prompt', () => {

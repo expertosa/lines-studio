@@ -46,6 +46,7 @@ test('polls MoneyPrinterTurbo until the task completes', async () => {
   const sent = JSON.parse(calls[0].body);
   assert.equal(sent.video_source, 'pixabay');
   assert.equal(sent.voice_name, 'ar-SA-HamedNeural');
+  assert.equal(sent.subtitle_enabled, false);
   assert.equal(beats.length, 1);
 });
 

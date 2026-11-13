@@ -1,4 +1,4 @@
-import { NOMINAL_SIZE, TEMPLATE_SIZE } from './constants.js';
+import { NOMINAL_SIZE, SHOWCASE_SIZE, TEMPLATE_SIZE } from './constants.js';
 
 const VOICES = Object.freeze({
   ar: Object.freeze(['ar-SA-HamedNeural', 'ar-SA-ZariyahNeural']),
@@ -21,6 +21,7 @@ const SHARED = Object.freeze({
  * `template` is the built-in ffmpeg engine and stays local when it is enabled.
  * `blender` (style `promo3d`) is pulled by the Blender worker and is listed only when enabled.
  * `ugc` is pulled by the UGC worker (paid vendor calls) and is listed only when enabled.
+ * `showcase` is a local ffmpeg Ken Burns clip pulled by the Mac video worker.
  * `external` is reserved for a future generative vendor and is not listed until configured.
  */
 const DEFINITIONS = Object.freeze([
@@ -67,10 +68,23 @@ const DEFINITIONS = Object.freeze([
     engine: 'blender',
     description: 'Procedural 3D promo rendered in Blender on the Mac worker (hero mockup, animated lines, brand palette).',
   }),
+  Object.freeze({
+    id: 'showcase',
+    label: 'Showcase',
+    engine: 'showcase',
+    description: 'Slow Ken Burns move over a supplied screenshot. Vertical 9:16, 6–10 seconds, no text, no logo, no audio. Local ffmpeg on the Mac worker.',
+    formats: Object.freeze(['9:16']),
+    seconds: Object.freeze([6, 7, 8, 9, 10]),
+    voices: Object.freeze({ ar: Object.freeze(['none']), en: Object.freeze(['none']) }),
+    defaultVoice: Object.freeze({ ar: 'none', en: 'none' }),
+    requiresImage: true,
+  }),
 ]);
 
+const FIXED_ENGINES = new Set(['template', 'blender', 'ugc', 'showcase']);
+
 function engineFor(style, defaultEngine) {
-  if (style.engine === 'template' || style.engine === 'blender' || style.engine === 'ugc') return style.engine;
+  if (FIXED_ENGINES.has(style.engine)) return style.engine;
   return defaultEngine;
 }
 
@@ -92,6 +106,7 @@ export function listStyles({ enableTemplate, enableBlender = false, enableUgc = 
     voices: style.voices || SHARED.voices,
     defaultVoice: style.defaultVoice || SHARED.defaultVoice,
     requiresScript: Boolean(style.requiresScript),
+    requiresImage: Boolean(style.requiresImage),
   }));
 }
 
@@ -100,6 +115,6 @@ export function findStyle(id, options) {
 }
 
 export function pixelSize(engine, format) {
-  const table = engine === 'template' ? TEMPLATE_SIZE : NOMINAL_SIZE;
+  const table = engine === 'template' ? TEMPLATE_SIZE : engine === 'showcase' ? SHOWCASE_SIZE : NOMINAL_SIZE;
   return table[format] || null;
 }

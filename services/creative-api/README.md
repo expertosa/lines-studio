@@ -60,12 +60,18 @@ Create body:
   "language": "ar",
   "seconds": 30,
   "voice": "ar-SA-HamedNeural",
+  "subtitles": false,
+  "voiceover": true,
   "callbackUrl": "https://example.com/api/app/studio/render-callback",
   "metadata": { "source": "web" }
 }
 ```
 
-Send `prompt` and/or `script`. `format` is `9:16`, `16:9`, or `1:1`. `language` is `ar` or `en`. `seconds` is `15`, `30`, or `60`. `voice` defaults to `ar-SA-HamedNeural` or `en-US-JennyNeural`. `callbackUrl` is https only; loopback, link-local, and private addresses are rejected (**422 `ssrf_blocked`**), including after DNS resolution.
+Send `prompt` and/or `script`. `format` is `9:16`, `16:9`, or `1:1`. `language` is `ar` or `en`. `seconds` is `15`, `30`, or `60` (showcase uses `6` through `10`). `voice` defaults to `ar-SA-HamedNeural` or `en-US-JennyNeural`.
+
+`subtitles` defaults to **false**. The worker burns captions only when the request sets `subtitles: true`. `voiceover` defaults to **true** for existing styles. `voiceover: false` skips TTS (and background music) so a muted stock clip does not need a speech engine. Omitting either field keeps those defaults, and an idempotency key from before the fields still replays.
+
+`callbackUrl` is https only; loopback, link-local, and private addresses are rejected (**422 `ssrf_blocked`**), including after DNS resolution.
 
 States: `queued` → `running` → `succeeded` | `failed` | `cancelled`.
 
@@ -101,6 +107,8 @@ The in-process template worker only claims `engine: "template"`. MoneyPrinter jo
 
 `style: "ugc"` (engine `ugc`) is a selfie-style testimonial: a fixed presenter speaks `script.text` (required) with lip sync. It is listed only when `LINES_ENABLE_UGC=1` and claimed by a worker key with `--engines ugc`. Format `9:16` only, `seconds` 15 or 30, `voice` is always `"presenter"`, `metadata.presenter` picks the presenter. The worker makes paid vendor calls (ElevenLabs, fal.ai); this API still makes none. See `services/ugc-worker/README.md`.
 
+`style: "showcase"` (engine `showcase`) is a silent 720×1280 Ken Burns clip, 6–10 seconds, from `imageUrl`. The Mac video worker encodes it with ffmpeg. There is no narration, no music, no burned-in text, and no logo. `imageUrl` is required and must be https on `lines.studio` (`/work/<id>.webp`, png, or jpeg) or on `api.lines.studio` (`/v1/jobs/<id>/artifacts/<id>`, optional `exp` and `sig`). Any other host, port, or path is **422 `ssrf_blocked`**. This process does not download the image. `prompt` is optional and is not drawn. `subtitles: true` and `voiceover: true` are rejected. A worker key needs engine `showcase` (the Mac key can list `moneyprinter,showcase`). `LINES_IMAGE_HOSTS` may add extra hostnames; addresses and localhost are ignored.
+
 ## Single instance
 
 The data directory has one writer. The process holds a SQLite reserved lock on `worker.lock` and a heartbeat in `worker.leader.json` (hostname, pid, timestamp). The kernel releases the lock when the process dies, including SIGKILL, so a new container is not blocked by a file that says PID 1 (that pid is alive inside every container). A leftover text lock from the previous build is ignored once it is older than 15 seconds.
@@ -111,7 +119,8 @@ Coolify starts the new container, waits until its health check passes, then stop
 
 ```bash
 LINES_DATA_DIR=/data node src/keys-cli.js create-app --tenant experto-web
-LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-mini --engines moneyprinter
+LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-mini --engines moneyprinter,showcase
+LINES_DATA_DIR=/data node src/keys-cli.js set-engines --id mac-mini --engines moneyprinter,showcase
 LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id mac-blender --engines blender
 LINES_DATA_DIR=/data node src/keys-cli.js create-worker --id ugc-worker --engines ugc
 LINES_DATA_DIR=/data node src/keys-cli.js rotate-key --id experto-web
@@ -158,6 +167,7 @@ Set these on the Coolify app. Do not commit values.
 | `LINES_ENABLE_TEMPLATE` | `1` (default) keeps the ffmpeg title-card engine. `0` hides `style: "template"`. |
 | `LINES_ENABLE_BLENDER` | `1` lists `style: "promo3d"` (Blender worker on the Mac). Default off. |
 | `LINES_ENABLE_UGC` | `1` lists `style: "ugc"` (paid vendors via the UGC worker). Default off. |
+| `LINES_IMAGE_HOSTS` | Extra showcase image hosts, comma-separated. `lines.studio`, `www.lines.studio`, and `api.lines.studio` are always allowed. IPs and localhost are dropped. Set the same list on the Mac worker. |
 | `LINES_BOOTSTRAP_KEYS` | JSON array above. Secret values. Not logged. |
 | `LINES_BOOTSTRAP_KEYS_FILE` | Absolute path to that JSON. Prefer this over the inline variable. |
 | `LINES_SIGNING_KEY` | HMAC key for short-lived artifact URLs. |

@@ -60,6 +60,27 @@ Style mapping:
 
 `format` is passed through as MoneyPrinterTurbo's `video_aspect` (`9:16`, `16:9`, `1:1`). A caller-supplied `script.text` is `video_script`. A `prompt` alone becomes `video_script_prompt` so the local LLM writes the narration.
 
+Subtitles are off unless the job sets `subtitles: true` (`subtitle_enabled`). A job that omits the field is not captioned. `voiceover: false` sends MoneyPrinterTurbo `voice_name: "no-voice"` and turns background music off, so the clip does not call TTS. The default remains voiceover on.
+
+## Showcase
+
+`style: "showcase"` (engine `showcase`) does not call MoneyPrinterTurbo or Pixabay. The worker downloads `imageUrl` and encodes a 720×1280 H.264 MP4 with local `ffmpeg`:
+
+- duration is the job's `seconds` (6, 7, 8, 9, or 10)
+- the still is fit inside the frame; a blurred, darkened cover of the same still fills the rest
+- a slow zoom and pan returns to the opening frame so the clip can loop
+- no drawtext, no logo, no audio stream, no subtitle stream
+
+`imageUrl` must already have been accepted by the API. The worker checks it again and will not follow a redirect. Allowed URLs are `https://lines.studio/work/<id>.webp` (also png or jpeg, and `www.lines.studio`) and `https://api.lines.studio/v1/jobs/<uuid>/artifacts/<uuid>` with optional `exp` and `sig`. DNS answers in private, loopback, or link-local ranges are refused. `LINES_IMAGE_HOSTS` adds hostnames the same way as on the API.
+
+The worker key has to include `showcase`. On the API host, this keeps the current token:
+
+```bash
+LINES_DATA_DIR=/data node src/keys-cli.js set-engines --id mac-mini --engines moneyprinter,showcase
+```
+
+`ffmpeg` must be on `PATH`, or set `LINES_FFMPEG` to the binary (Homebrew is often `/opt/homebrew/bin/ffmpeg` on Apple silicon and `/usr/local/bin/ffmpeg` on Intel). Launchd does not inherit a login `PATH`, so put that variable in the LaunchAgent environment.
+
 ## Worker process
 
 ```bash
@@ -97,12 +118,32 @@ Only one of the two machines should run the worker. If both poll, the API still 
 | `LINES_WORKER_TOKEN` | Inline token if the file is not set. Prefer the file. |
 | `MPT_BASE_URL` | Default `http://127.0.0.1:8080`. |
 | `MPT_CHECKOUT` | Default `$LINES_WORKER_ROOT/MoneyPrinterTurbo`. |
-| `MPT_FONT_NAME` | Default `NotoNaskhArabic-Regular.ttf`. |
+| `MPT_FONT_NAME` | Default `NotoNaskhArabic-Regular.ttf`. Used only when `subtitles` is true. |
+| `LINES_FFMPEG` | ffmpeg binary for showcase and thumbnails. Default `ffmpeg`. |
+| `LINES_IMAGE_HOSTS` | Extra showcase image hosts. Same rules as the API. |
 | `LINES_WORKER_POLL_MS` | Idle poll. Default 5000. |
 | `LINES_HEARTBEAT_MS` | Default 30000. Keep this under the API lease (120s). |
 | `MPT_POLL_MS` | Task poll. Default 3000. |
 | `TMPDIR` / `XDG_CACHE_HOME` | Set by the process to `tmp/` and `cache/` on the drive. |
 
+## Updating the copy on the Mac mini
+
+The process that launchd runs is `/Volumes/Data/lines-video-worker/app`. Leave the checkout, cache, and Colima disk on that drive.
+
+1. Deploy the API first (Coolify, `api.lines.studio`) so it accepts `subtitles`, `voiceover`, and `style: "showcase"`.
+2. On the API host, add the engine without rotating the bearer: `LINES_DATA_DIR=/data node src/keys-cli.js set-engines --id mac-mini --engines moneyprinter,showcase`. `list` shows the key id if it is not `mac-mini`. Do not run `create-worker` again for an existing id; that replaces the token.
+3. On the Mac mini, from a checkout of this repo:
+
+```bash
+rsync -a --delete --exclude node_modules \
+  services/mac-video-worker/ /Volumes/Data/lines-video-worker/app/
+```
+
+4. Point `LINES_FFMPEG` at the ffmpeg binary in the LaunchAgent if launchd's `PATH` does not include it.
+5. `launchctl kickstart -k gui/$(id -u)/com.lines.video-worker`
+
+Only one of the Mac mini and the MacBook should run the worker.
+
 ## Tests
 
-`npm test` in this directory does not need the drive, Colima, or a token. It checks the request mapping, the `/Volumes/Data` guard, and the MoneyPrinterTurbo poll loop against a fake HTTP client.
+`npm test` in this directory does not need the drive, Colima, or a token. It checks the request mapping, the `/Volumes/Data` guard, the MoneyPrinterTurbo poll loop against a fake HTTP client, and a local ffmpeg showcase render (needs `ffmpeg` and `ffprobe` on `PATH`).

@@ -1,10 +1,11 @@
 openapi: 3.0.3
 info:
   title: Lines video API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Server-to-server short-video jobs for Experto apps. Mobile clients call their own backend.
     The backend holds the bearer key. MoneyPrinterTurbo is reached only by the Mac pull worker.
+    Burned-in subtitles stay off unless `subtitles` is true. `style: showcase` is a silent Ken Burns clip from an allowlisted image, rendered with ffmpeg on that same Mac.
 servers:
   - url: https://api.lines.studio
     description: Production
@@ -314,7 +315,8 @@ components:
       name: seconds
       in: query
       required: true
-      schema: { type: integer, enum: [15, 30, 60] }
+      description: 15, 30, or 60 for stock styles. 6, 7, 8, 9, or 10 for showcase.
+      schema: { type: integer, enum: [6, 7, 8, 9, 10, 15, 30, 60] }
     style:
       name: style
       in: query
@@ -373,11 +375,26 @@ components:
                 properties:
                   text: { type: string }
                   seconds: { type: integer }
-        style: { type: string, example: promo }
+        style: { type: string, example: promo, description: "promo, story, calm, template, promo3d, ugc, or showcase" }
         format: { $ref: "#/components/schemas/Format" }
         language: { $ref: "#/components/schemas/Language" }
-        seconds: { type: integer, enum: [15, 30, 60] }
+        seconds:
+          type: integer
+          enum: [6, 7, 8, 9, 10, 15, 30, 60]
+          description: 15, 30, or 60 for existing styles. 6 through 10 for showcase only.
         voice: { type: string, example: ar-SA-HamedNeural }
+        subtitles:
+          type: boolean
+          default: false
+          description: Burn captions into the picture only when true. Omitted means false. Showcase rejects true.
+        voiceover:
+          type: boolean
+          default: true
+          description: Narration via Edge TTS. false asks the Mac worker to skip TTS (MoneyPrinterTurbo voice `no-voice`, no music). Default stays on for existing styles. Showcase is always silent and rejects true.
+        imageUrl:
+          type: string
+          format: uri
+          description: Required for showcase. https only, host lines.studio (`/work/<id>.webp`) or api.lines.studio (`/v1/jobs/<id>/artifacts/<id>`). Other styles reject this field.
         callbackUrl: { type: string, format: uri }
         metadata:
           type: object
@@ -400,7 +417,10 @@ components:
         language: { $ref: "#/components/schemas/Language" }
         seconds: { type: integer }
         voice: { type: string }
-        engine: { type: string, enum: [moneyprinter, template, external, blender, ugc] }
+        subtitles: { type: boolean, description: "Effective value. false unless the request set true." }
+        voiceover: { type: boolean }
+        imageUrl: { type: string, nullable: true }
+        engine: { type: string, enum: [moneyprinter, template, external, blender, ugc, showcase] }
         endUserId: { type: string, nullable: true }
         prompt: { type: string, nullable: true }
         script: { type: object, nullable: true }
@@ -442,7 +462,10 @@ components:
         format: { $ref: "#/components/schemas/Format" }
         language: { $ref: "#/components/schemas/Language" }
         seconds: { type: integer }
-        voice: { type: string, description: "Edge TTS voice, or \"presenter\" for ugc (the presenter's own voice)" }
+        voice: { type: string, description: "Edge TTS voice, \"presenter\" for ugc, or \"none\" for showcase" }
+        subtitles: { type: boolean, description: "When false, the worker must not burn text. Showcase is always false." }
+        voiceover: { type: boolean, description: "When false, skip TTS. Showcase is always false and has no audio track." }
+        imageUrl: { type: string, nullable: true, description: "Allowlisted still for showcase. Null for other styles." }
         metadata: { type: object, additionalProperties: true, description: "Caller metadata; workers read render options from it (promo3d palette/hero, ugc presenter)" }
         engine: { type: string }
         width: { type: integer }
@@ -487,3 +510,5 @@ components:
           items: { $ref: "#/components/schemas/Language" }
         voices: { type: object }
         defaultVoice: { type: object }
+        requiresScript: { type: boolean }
+        requiresImage: { type: boolean }

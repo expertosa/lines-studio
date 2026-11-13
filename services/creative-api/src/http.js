@@ -11,7 +11,7 @@ import { artifactSignature, signaturesEqual } from './sign.js';
 import { listStyles } from './styles.js';
 import { blenderEngine } from './engines/blender.js';
 import { ugcEngine } from './engines/ugc.js';
-import { localizeEngine } from './engines/localize.js';
+import { estimateLocalizeCost, localizeEngine } from './engines/localize.js';
 import { validateJob } from './validate.js';
 import { clientIp } from './auth-limit.js';
 
@@ -215,6 +215,7 @@ async function health(req, res, ctx) {
         mode: localizeEngine.mode,
         paidCalls: localizeEngine.paidCalls,
         swapModel: localizeEngine.swapModel,
+        translateModel: localizeEngine.translateModel,
       },
       external: { configured: false },
     },
@@ -229,7 +230,7 @@ async function styles(req, res, ctx) {
 async function quote(req, res, ctx) {
   assertApp(req, ctx.store, 'jobs:read');
   const url = pathname(req);
-  const allowed = new Set(['seconds', 'style', 'format', 'language']);
+  const allowed = new Set(['seconds', 'style', 'format', 'language', 'swaps', 'dub']);
   for (const key of url.searchParams.keys()) {
     if (!allowed.has(key)) {
       throw new ApiError(422, 'validation_error', 'Query is invalid.', [{ path: key, code: 'unknown' }]);
@@ -246,7 +247,14 @@ async function quote(req, res, ctx) {
       { path: 'seconds', code: 'enum' },
     ]);
   }
-  send(res, 200, {
+  if (style.engine !== 'localize') {
+    for (const key of ['swaps', 'dub']) {
+      if (url.searchParams.has(key)) {
+        throw new ApiError(422, 'validation_error', 'Query is invalid.', [{ path: key, code: 'unknown' }]);
+      }
+    }
+  }
+  const body = {
     style: style.id,
     seconds,
     format,
@@ -256,7 +264,18 @@ async function quote(req, res, ctx) {
     currency: 'SAR',
     amount: 0,
     includedInPlan: true,
-  });
+  };
+  if (style.engine === 'localize') {
+    const swapsRaw = url.searchParams.get('swaps');
+    const swapCount = swapsRaw == null || swapsRaw === '' ? 1 : Number(swapsRaw);
+    const dubRaw = url.searchParams.get('dub');
+    const dub = dubRaw == null || dubRaw === '' ? true : !['0', 'false', 'no'].includes(String(dubRaw).toLowerCase());
+    if (!Number.isInteger(swapCount) || swapCount < 0 || swapCount > 30) {
+      throw new ApiError(422, 'validation_error', 'Quote is invalid.', [{ path: 'swaps', code: 'enum' }]);
+    }
+    body.cost = estimateLocalizeCost({ seconds, swapCount, dub });
+  }
+  send(res, 200, body);
 }
 
 async function createJob(req, res, ctx) {

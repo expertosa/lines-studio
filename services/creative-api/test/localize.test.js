@@ -51,7 +51,7 @@ test('localize is hidden and rejected until enabled', async () => {
     assert.equal(res.status, 422);
     assert.ok(hasDetail(res, 'style', 'enum'), details(res));
     const health = await api(ctx.app, 'GET', '/v1/health');
-    assert.deepEqual(health.json.engines.localize, { enabled: false, mode: 'pull', paidCalls: false, swapModel: 'not_connected' });
+    assert.deepEqual(health.json.engines.localize, { enabled: false, mode: 'pull', paidCalls: true, swapModel: 'aleph2', translateModel: 'heygen_precision' });
   } finally {
     await ctx.close();
   }
@@ -68,6 +68,11 @@ test('localize style is listed with its own engine and no prompt is needed', asy
     assert.equal(quote.status, 200);
     assert.equal(quote.json.engine, 'localize');
     assert.equal(quote.json.amount, 0);
+    assert.equal(quote.json.cost.estimateUsd, 9.15);
+    assert.equal(quote.json.cost.withinCap, true);
+    assert.equal(quote.json.cost.language, 'Arabic (Saudi Arabia)');
+    const quoteFour = await api(ctx.app, 'GET', '/v1/quote?seconds=30&style=localize&format=9:16&language=ar&swaps=4&dub=1', { token: APP_TOKEN });
+    assert.equal(quoteFour.json.cost.estimateUsd, 9.15);
 
     const created = await createJob(ctx.app, APP_TOKEN, localizeBody(), 'idem-loc-ok');
     assert.equal(created.status, 202, created.text);
@@ -80,6 +85,8 @@ test('localize style is listed with its own engine and no prompt is needed', asy
     assert.deepEqual(job.json.localize.captions, { dialect: 'najdi', text: 'صباحك أحلى مع قهوتنا' });
     assert.equal(job.json.localize.dub, true);
     assert.deepEqual(job.json.localize.consent, { likeness: true });
+    assert.equal(job.json.cost.estimateUsd, 9.15);
+    assert.equal(job.json.cost.breakdown.aleph.generations, 1);
 
     const replay = await createJob(ctx.app, APP_TOKEN, localizeBody(), 'idem-loc-ok');
     assert.equal(replay.status, 202);
@@ -168,6 +175,8 @@ test('localize jobs go only to a localize worker, with the spec', async () => {
     assert.equal(claim.json.job.engine, 'localize');
     assert.equal(claim.json.job.localize.swaps[1].preset, 'thobe-shemagh');
     assert.equal(claim.json.job.localize.captions.dialect, 'najdi');
+    assert.equal(claim.json.job.cost.estimateUsd, 9.15);
+    assert.equal(claim.json.job.cost.withinCap, true);
 
     // The worker can fail it honestly while the swap model is not connected.
     const fail = await api(ctx.app, 'POST', `/v1/worker/jobs/${created.json.id}/fail`, {

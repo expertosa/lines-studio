@@ -1,3 +1,4 @@
+import { costForJob } from './engines/localize.js';
 import { signedArtifactPath } from './sign.js';
 
 function iso(ms) {
@@ -52,6 +53,7 @@ export function presentJob(job, artifacts, { summary = false, signing = null, no
     body.metadata = job.metadata;
     body.callbackUrl = job.callbackUrl;
     if (job.localize) body.localize = job.localize;
+    if (job.localize) body.cost = costForJob(job);
   }
   return body;
 }
@@ -77,5 +79,6 @@ export function presentWorkerJob(job) {
     height: job.height,
     attempt: job.attempt,
     deadlineAt: iso(job.deadlineAt),
+    cost: job.localize ? costForJob(job) : null,
   };
 }

@@ -389,7 +389,7 @@ components:
       description: >-
         Required for style `localize` (listed only when LINES_ENABLE_LOCALIZE=1), rejected for other styles.
         Needs at least one of swaps, captions, dub. A character swap or a dub needs consent.likeness=true.
-        The swap model is not connected yet: jobs queue for a `localize` worker and none exists today.
+        A localize worker runs Runway Aleph 2.0 for visual swaps and HeyGen Precision (`Arabic (Saudi Arabia)`) for dub plus lip-sync. Jobs include a duration-based cost estimate and are refused when they exceed LINES_LOCALIZE_MAX_USD (default 15).
       required: [source]
       properties:
         source:

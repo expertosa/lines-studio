@@ -71,7 +71,7 @@ const DEFINITIONS = Object.freeze([
     id: 'localize',
     label: 'Ad localization',
     engine: 'localize',
-    description: 'Saudi version of an existing video ad: swap characters, outfits, products and backgrounds, with Saudi-dialect captions and an optional dub. Requires the localize spec. The swap model is not connected yet.',
+    description: 'Saudi version of an existing video ad: Aleph 2.0 swaps characters, outfits, products and backgrounds, then HeyGen Precision translates to Arabic (Saudi Arabia) with lip-sync when dub is set. Requires the localize spec. Paid vendor calls run on the localize worker.',
     requiresLocalize: true,
   }),
 ]);

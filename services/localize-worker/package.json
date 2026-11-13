@@ -1,0 +1,15 @@
+{
+  "name": "@lines-studio/localize-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pull worker for Saudi ad localization: Runway Aleph 2.0 visual swaps plus HeyGen Precision translation with lip-sync.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/api.js && node --check src/heygen_translate.js && node --check src/index.js && node --check src/run.js && node --check src/runway_aleph.js"
+  }
+}

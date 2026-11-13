@@ -8,14 +8,18 @@ import fs from 'node:fs';
  * fails the job with `engine_not_configured` before any work starts.
  *
  * Voice (LINES_LOCAL_TTS, default `edge`):
- * - `edge`: reuses the Edge TTS that MoneyPrinterTurbo already uses on the Mac
- *   (`ar-SA-HamedNeural` / `ar-SA-ZariyahNeural`). Point LINES_EDGE_TTS_BIN at the
- *   `edge-tts` CLI inside MoneyPrinterTurbo's venv. Saudi-accented, mostly MSA wording.
- * - `namaa`: NAMAA-Saudi-TTS (Chatterbox fine-tune, MIT). LINES_NAMAA_TTS_CMD is an
- *   executable called as `<cmd> --text <line> --out <file.wav>`. Not installed yet.
+ * - `edge`: Edge TTS (`ar-SA-HamedNeural` / `ar-SA-ZariyahNeural`). Point LINES_EDGE_TTS_BIN
+ *   at an `edge-tts` CLI (isolated install: /Volumes/Data/localize-free/venvs/edge/bin/edge-tts).
+ *   Saudi-accented, mostly MSA wording, needs the internet.
+ * - `namaa`: NAMAA-Saudi-TTS v1 (NAMAA-Space/NAMAA-Saudi-TTS, Chatterbox fine-tune, MIT).
+ *   LINES_NAMAA_TTS_CMD is an executable called as `<cmd> --text <line> --out <file.wav>`.
+ *   Wrapper on the Mac mini: /Volumes/Data/localize-free/bin/namaa-tts (MPS).
  * Lip-sync: LINES_MUSETALK_CMD, called as `<cmd> --video <in.mp4> --audio <voice> --out <out.mp4>`
- * (MuseTalk 1.5, MIT; MLX port on Apple Silicon). Not installed yet.
+ * (MuseTalk 1.5, MIT; MLX fp16 via dahai80/musetalk-mlx). Wrapper:
+ * /Volumes/Data/localize-free/bin/musetalk-run. Official musetalk-mlx-offline hits
+ * "no Stream(gpu, 0) in current thread"; the wrapper runs a main-thread path.
  * ffmpeg/ffprobe: LINES_FFMPEG / LINES_FFPROBE (default from PATH), same as the other Mac workers.
+ * Example env: mac-free.env.example in this package.
  */
 
 export const EDGE_VOICES = Object.freeze({ male: 'ar-SA-HamedNeural', female: 'ar-SA-ZariyahNeural' });

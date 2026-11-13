@@ -24,15 +24,19 @@ Local tools (nothing is installed by this worker; each is an executable path):
 
 | Env | What | Status on the Mac mini |
 |---|---|---|
-| `LINES_LOCAL_TTS` | `edge` (default) or `namaa` | |
-| `LINES_EDGE_TTS_BIN` | `edge-tts` CLI from MoneyPrinterTurbo's environment; voice `LINES_EDGE_VOICE`, default `ar-SA-HamedNeural` (or `ar-SA-ZariyahNeural`) | already used by MoneyPrinterTurbo |
-| `LINES_NAMAA_TTS_CMD` | wrapper called as `--text <line> --out <file.wav>` for NAMAA-Saudi-TTS (Chatterbox, MIT) | not installed; needs approval |
-| `LINES_MUSETALK_CMD` | wrapper called as `--video <in> --audio <voice> --out <out.mp4>` for MuseTalk 1.5 (MIT; MLX port on Apple Silicon) | not installed; needs approval |
-| `LINES_FFMPEG`, `LINES_FFPROBE` | default from PATH | Homebrew ffmpeg (used by the other Mac workers) |
+| `LINES_LOCAL_TTS` | `edge` (default) or `namaa` | both installed under `/Volumes/Data/localize-free` |
+| `LINES_EDGE_TTS_BIN` | `edge-tts` CLI; voice `LINES_EDGE_VOICE`, default `ar-SA-HamedNeural` (or `ar-SA-ZariyahNeural`) | `/Volumes/Data/localize-free/venvs/edge/bin/edge-tts` (isolated; do not point this at MoneyPrinterTurbo) |
+| `LINES_NAMAA_TTS_CMD` | wrapper called as `--text <line> --out <file.wav>` for NAMAA-Saudi-TTS v1 (Chatterbox, MIT, commercial OK). Do not use NAMAA-Saudi-TTS-V2 (CC-BY-NC-SA-4.0). | `/Volumes/Data/localize-free/bin/namaa-tts` (runs on MPS) |
+| `LINES_MUSETALK_CMD` | wrapper called as `--video <in> --audio <voice> --out <out.mp4>` for MuseTalk 1.5 (MIT; MLX fp16) | `/Volumes/Data/localize-free/bin/musetalk-run` |
+| `LINES_FFMPEG`, `LINES_FFPROBE` | default from PATH | `/opt/homebrew/bin/ffmpeg` and `ffprobe` |
+
+See `mac-free.env.example` for a copy-paste env block. Source `/Volumes/Data/localize-free/env.sh` in the worker shell so caches stay inside that isolated tree (`HF_HOME`, `TMPDIR`, `PKUSEG_HOME`). Do not modify `/Volumes/Data/lines-video-worker` or `/Volumes/Data/voice-pipeline`.
+
+The first free-tier test on 13 Nov 2026 (Africa/Casablanca) produced a real 4.32 s MP4, but quality is not client-ready yet: NAMAA ended early (4.32 s vs 7.6 s Edge / 9.4 s Piper for the same line), and the MuseTalk paste used a feather blend (no face-parse mask) that leaves a visible dark seam across the lower face. Official `musetalk-mlx-offline` failed with `There is no Stream(gpu, 0) in current thread`; `mlx-community/MuseTalk-1.5-q8` is incompatible with fusion-mlx 0.10.63 (`quantized_matmul` expected uint32, got float16). The wrapper uses a main-thread runner and the fp16 weights.
 
 Economy also needs `GEMINI_VERTEX_PROJECT`, `GEMINI_GCS_BUCKET` and a Google OAuth access token (`GOOGLE_OAUTH_ACCESS_TOKEN`, or the file `secrets/google-access-token`, mode 0600). Access tokens are short-lived; refresh the file outside this process (for example a LaunchAgent running `gcloud auth print-access-token`). Never put it in chat or logs.
 
-Edge TTS is Microsoft's online read-aloud voice reached through the open-source `edge-tts` package, not a paid Azure key. It is free and already in use here, but it is not a documented commercial API, the voices lean towards MSA rather than a regional dialect, and it needs the internet. NAMAA-Saudi-TTS is the planned upgrade for real Saudi dialect.
+Edge TTS is Microsoft's online read-aloud voice reached through the open-source `edge-tts` package, not a paid Azure key. It is free, but it is not a documented commercial API, the voices lean towards MSA rather than a regional dialect, and it needs the internet. NAMAA-Saudi-TTS v1 is installed for a more Saudi-dialect voice; listen to a sample before using it on a client ad, because the first test line came out shorter than Edge/Piper and may have stopped early.
 
 ## Keys and env
 

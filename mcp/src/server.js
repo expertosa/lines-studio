@@ -11,6 +11,7 @@ import { site } from '../../lib/site.js';
 import { t } from '../../lib/dict.js';
 import { launchOffer, launchPrice, offerActive } from '../../lib/promo.js';
 import { isSaudiMobile } from '../../lib/phone.js';
+import { adDialects, adPresets, adRequestMessage, adsCopy, adSwapKinds, needsLikenessConsent } from '../../lib/ads.js';
 
 const VERSION = '0.1.0';
 const Lang = z.enum(['ar', 'en']).default('ar').describe('Response language: ar (default) or en');
@@ -29,6 +30,7 @@ export function buildServer() {
         'Arabic-first design tools from Lines Studio (Riyadh). Use list_designs → get_design_kit for tokens, '
         + 'generate_page for a full RTL page, arabic_fonts for font choices, rtl_audit to review any Arabic HTML/CSS, '
         + 'and get_pricing / create_order_link when the user wants the studio to build the real site. '
+        + 'request_ad_localization prepares a request to make a Saudi version of an existing video ad. '
         + 'Reply to Arabic users in Arabic.',
     },
   );
@@ -182,6 +184,61 @@ export function buildServer() {
       deliveryDays: s.days,
       message: msg,
       note: lang === 'ar' ? 'افتح الرابط وأرسل الرسالة، والفريق يرد خلال ساعات العمل برابط الدفع.' : 'Open the link and send the message; the team replies in business hours with a payment link.',
+    });
+  });
+
+  const presetIds = [...new Set(Object.values(adPresets).flat().map((p) => p.id))];
+  server.registerTool('request_ad_localization', {
+    title: 'Request ad localization',
+    description: 'Build a pre-filled WhatsApp link asking Lines Studio for a Saudi version of an existing video ad '
+      + '(swap characters, outfits, products, backgrounds; Saudi-dialect captions or voice-over). Nothing is sent automatically: '
+      + 'give the link to the user to open and send. The studio replies with a quote; price is per request. '
+      + 'Ask for business name and Saudi mobile first. Swapping characters or a voice-over needs the user to confirm they hold the rights '
+      + '(likeness_consent: true); never set it on their behalf.',
+    inputSchema: {
+      business_name: z.string().min(1).max(80),
+      phone: z.string().max(20).describe('Customer Saudi mobile, e.g. 05XXXXXXXX'),
+      city: z.string().max(40).optional(),
+      ad_url: z.string().url().max(500).optional().describe('https link to the source ad, if the user has one'),
+      swaps: z.array(z.object({
+        kind: z.enum(adSwapKinds.map((k) => k.id)),
+        preset: z.enum(presetIds).optional().describe(Object.entries(adPresets).filter(([, v]) => v.length).map(([k, v]) => `${k}: ${v.map((p) => p.id).join(', ')}`).join(' | ')),
+      })).max(4).default([]),
+      captions: z.boolean().default(true).describe('Arabic captions on the video'),
+      dub: z.boolean().default(false).describe('Saudi-dialect voice-over'),
+      dialect: z.enum(adDialects.map((d) => d.id)).default('najdi'),
+      details: z.string().max(600).optional(),
+      likeness_consent: z.boolean().default(false).describe('Only true if the user said they hold the rights to change the people and voices in the ad'),
+      lang: Lang,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  }, async ({ business_name, phone, city, ad_url, swaps, captions, dub, dialect, details, likeness_consent, lang }) => {
+    const c = adsCopy[lang] || adsCopy.ar;
+    if (!isSaudiMobile(phone)) return fail(c.errPhoneFormat);
+    if (ad_url && !/^https:\/\//i.test(ad_url)) return fail(c.errUrl);
+    const kinds = [...new Set(swaps.map((s) => s.kind))];
+    const presets = {};
+    for (const s of swaps) {
+      if (!s.preset) continue;
+      if (!(adPresets[s.kind] || []).some((p) => p.id === s.preset)) return fail(`preset ${s.preset} does not fit ${s.kind}`);
+      presets[s.kind] = s.preset;
+    }
+    if (kinds.length === 0 && !captions && !dub) return fail(c.errKinds);
+    const consentNeeded = needsLikenessConsent({ kinds, dub });
+    if (consentNeeded && !likeness_consent) return fail(c.errConsent);
+    const msg = adRequestMessage({
+      lang, name: business_name, phone, city, adUrl: ad_url, kinds, presets,
+      dialect: captions || dub ? dialect : null, captions, dub, details,
+      consent: consentNeeded && likeness_consent, viaAgent: true,
+    });
+    return json({
+      link: `https://wa.me/${site.whatsapp}?text=${encodeURIComponent(msg)}`,
+      page: `https://${site.domain}/${lang}/ads/`,
+      price: lang === 'ar' ? 'حسب الطلب' : 'Per request',
+      message: msg,
+      note: lang === 'ar'
+        ? 'افتح الرابط وأرسل الرسالة. الفريق يراجع الإعلان والحقوق ويرد بعرض سعر قبل أي دفع.'
+        : 'Open the link and send the message. The team checks the ad and rights and replies with a quote before any payment.',
     });
   });
 

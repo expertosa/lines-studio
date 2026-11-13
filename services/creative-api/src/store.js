@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   voice TEXT NOT NULL,
   callback_url TEXT,
   metadata_json TEXT NOT NULL,
+  localize_json TEXT,
   request_hash TEXT NOT NULL,
   idempotency_key TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')),
@@ -150,6 +151,7 @@ function mapJob(row) {
     voice: row.voice,
     callbackUrl: row.callback_url,
     metadata: JSON.parse(row.metadata_json),
+    localize: row.localize_json ? JSON.parse(row.localize_json) : null,
     requestHash: row.request_hash,
     idempotencyKey: row.idempotency_key,
     status: row.status,
@@ -215,6 +217,8 @@ export function openStore(dataDir, { now = () => Date.now() } = {}) {
   if (columns.includes('brief_json')) {
     throw new Error('This data directory was created by the creative-jobs API. Use a fresh LINES_DATA_DIR.');
   }
+  // Additive and nullable: existing rows keep working and read localize as null.
+  if (!columns.includes('localize_json')) db.exec('ALTER TABLE jobs ADD COLUMN localize_json TEXT');
 
   const getKeyByHash = db.prepare(`SELECT * FROM api_keys WHERE token_hash = ? AND status = 'active'`);
   const getKeyById = db.prepare('SELECT * FROM api_keys WHERE id = ?');
@@ -394,13 +398,13 @@ export function openStore(dataDir, { now = () => Date.now() } = {}) {
           db.prepare(`
             INSERT INTO jobs (
               id, tenant_id, end_user_id, reference, title, prompt, script_json, style, format,
-              language, seconds, voice, callback_url, metadata_json, request_hash, idempotency_key,
+              language, seconds, voice, callback_url, metadata_json, localize_json, request_hash, idempotency_key,
               status, engine, width, height, attempt, max_attempts, cancel_requested,
               error_code, error_message, lease_owner, lease_expires_at, created_at, updated_at,
               started_at, finished_at, heartbeat_at, deadline_at, artifact_ttl_ms
             ) VALUES (
               ?, ?, ?, ?, ?, ?, ?, ?, ?,
-              ?, ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?, ?, ?,
               'queued', ?, ?, ?, 0, ?, 0,
               NULL, NULL, NULL, NULL, ?, ?,
               NULL, NULL, NULL, ?, ?
@@ -420,6 +424,7 @@ export function openStore(dataDir, { now = () => Date.now() } = {}) {
             input.voice,
             input.callbackUrl,
             JSON.stringify(input.metadata || {}),
+            input.localize ? JSON.stringify(input.localize) : null,
             input.requestHash,
             input.idempotencyKey,
             input.engine,

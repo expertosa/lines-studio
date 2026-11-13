@@ -11,6 +11,7 @@ import { artifactSignature, signaturesEqual } from './sign.js';
 import { listStyles } from './styles.js';
 import { blenderEngine } from './engines/blender.js';
 import { ugcEngine } from './engines/ugc.js';
+import { localizeEngine } from './engines/localize.js';
 import { validateJob } from './validate.js';
 import { clientIp } from './auth-limit.js';
 
@@ -53,6 +54,7 @@ function styleOptions(ctx) {
     enableTemplate: ctx.enableTemplate,
     enableBlender: ctx.enableBlender,
     enableUgc: ctx.enableUgc,
+    enableLocalize: ctx.enableLocalize,
     defaultEngine: ctx.defaultEngine,
   };
 }
@@ -208,6 +210,12 @@ async function health(req, res, ctx) {
       },
       blender: { enabled: Boolean(ctx.enableBlender), mode: blenderEngine.mode, macRequired: blenderEngine.macRequired },
       ugc: { enabled: Boolean(ctx.enableUgc), mode: ugcEngine.mode, paidCalls: ugcEngine.paidCalls },
+      localize: {
+        enabled: Boolean(ctx.enableLocalize),
+        mode: localizeEngine.mode,
+        paidCalls: localizeEngine.paidCalls,
+        swapModel: localizeEngine.swapModel,
+      },
       external: { configured: false },
     },
   });

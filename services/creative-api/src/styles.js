@@ -67,18 +67,26 @@ const DEFINITIONS = Object.freeze([
     engine: 'blender',
     description: 'Procedural 3D promo rendered in Blender on the Mac worker (hero mockup, animated lines, brand palette).',
   }),
+  Object.freeze({
+    id: 'localize',
+    label: 'Ad localization',
+    engine: 'localize',
+    description: 'Saudi version of an existing video ad: swap characters, outfits, products and backgrounds, with Saudi-dialect captions and an optional dub. Requires the localize spec. The swap model is not connected yet.',
+    requiresLocalize: true,
+  }),
 ]);
 
 function engineFor(style, defaultEngine) {
-  if (style.engine === 'template' || style.engine === 'blender' || style.engine === 'ugc') return style.engine;
+  if (style.engine === 'template' || style.engine === 'blender' || style.engine === 'ugc' || style.engine === 'localize') return style.engine;
   return defaultEngine;
 }
 
-export function listStyles({ enableTemplate, enableBlender = false, enableUgc = false, defaultEngine }) {
+export function listStyles({ enableTemplate, enableBlender = false, enableUgc = false, enableLocalize = false, defaultEngine }) {
   return DEFINITIONS.filter((style) => {
     if (style.engine === 'template') return enableTemplate;
     if (style.engine === 'blender') return enableBlender;
     if (style.engine === 'ugc') return enableUgc;
+    if (style.engine === 'localize') return enableLocalize;
     return true;
   }).map((style) => ({
     id: style.id,
@@ -92,6 +100,7 @@ export function listStyles({ enableTemplate, enableBlender = false, enableUgc = 
     voices: style.voices || SHARED.voices,
     defaultVoice: style.defaultVoice || SHARED.defaultVoice,
     requiresScript: Boolean(style.requiresScript),
+    requiresLocalize: Boolean(style.requiresLocalize),
   }));
 }
 

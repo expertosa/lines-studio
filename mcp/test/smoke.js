@@ -16,7 +16,7 @@ const call = async (name, args) => {
 };
 
 const { tools } = await client.listTools();
-assert.deepEqual(tools.map((t) => t.name).sort(), ['arabic_fonts', 'create_order_link', 'generate_page', 'get_design_kit', 'get_pricing', 'list_designs', 'rtl_audit']);
+assert.deepEqual(tools.map((t) => t.name).sort(), ['arabic_fonts', 'create_order_link', 'generate_page', 'get_design_kit', 'get_pricing', 'list_designs', 'request_ad_localization', 'rtl_audit']);
 
 let r = await call('list_designs', { category: 'clinic' });
 assert.equal(r.structuredContent.designs.length, 2);
@@ -53,6 +53,27 @@ assert.match(r.structuredContent.link, /^https:\/\/wa\.me\/966541555511\?text=/)
 assert.equal(r.structuredContent.total, 3430);
 r = await call('create_order_link', { design_id: 'muftah', size: 'five', business_name: 'x', phone: '123' });
 assert.equal(r.isError, true);
+
+r = await call('request_ad_localization', {
+  business_name: 'محمصة الديرة', phone: '0551234567', ad_url: 'https://example.com/ad.mp4',
+  swaps: [{ kind: 'outfit', preset: 'thobe-shemagh' }, { kind: 'background', preset: 'riyadh-boulevard' }, { kind: 'product' }],
+});
+assert.equal(r.isError, undefined, JSON.stringify(r.content));
+assert.match(r.structuredContent.link, /^https:\/\/wa\.me\/966541555511\?text=/);
+assert.match(r.structuredContent.message, /ثوب وشماغ/);
+assert.match(r.structuredContent.message, /بوليفارد الرياض/);
+assert.match(r.structuredContent.message, /نجدي/);
+assert.match(r.structuredContent.page, /\/ar\/ads\/$/);
+r = await call('request_ad_localization', { business_name: 'x', phone: '0551234567', swaps: [{ kind: 'character', preset: 'saudi-man' }] });
+assert.equal(r.isError, true, 'character swap needs consent');
+r = await call('request_ad_localization', { business_name: 'x', phone: '0551234567', swaps: [{ kind: 'character' }], likeness_consent: true });
+assert.match(r.structuredContent.message, /أؤكد إن عندي حق/);
+r = await call('request_ad_localization', { business_name: 'x', phone: '0551234567', swaps: [{ kind: 'outfit', preset: 'alula' }] });
+assert.equal(r.isError, true, 'background preset on an outfit');
+r = await call('request_ad_localization', { business_name: 'x', phone: '123', captions: true });
+assert.equal(r.isError, true, 'bad phone');
+r = await call('request_ad_localization', { business_name: 'x', phone: '0551234567', captions: false, dub: false });
+assert.equal(r.isError, true, 'nothing requested');
 
 const { prompts } = await client.listPrompts();
 assert.equal(prompts[0].name, 'arabic_landing_page');

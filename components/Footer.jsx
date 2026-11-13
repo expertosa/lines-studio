@@ -15,6 +15,7 @@ export default function Footer({ lang }) {
           <a href={`https://wa.me/${site.whatsapp}`} dir="ltr" data-umami-event="whatsapp" data-umami-event-place="footer">{site.whatsappDisplay}</a>
           <a href={`mailto:${site.email}`}>{site.email}</a>
           <Link href={`/${lang}/work/`}>{ar ? 'أعمالنا' : 'Work'}</Link>
+          <Link href={`/${lang}/ads/`}>{ar ? 'إعلانات' : 'Ads'}</Link>
           <Link href={`/${lang}/social/`}>{ar ? 'إدارة السوشال ميديا' : 'Social media'}</Link>
           <Link href={`/${lang}/mcp/`}>{ar ? 'MCP للوكلاء' : 'MCP for agents'}</Link>
           <Link href={`/${lang}/privacy/`}>{ar ? 'سياسة الخصوصية' : 'Privacy'}</Link>

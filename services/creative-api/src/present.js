@@ -51,6 +51,7 @@ export function presentJob(job, artifacts, { summary = false, signing = null, no
     body.script = job.script;
     body.metadata = job.metadata;
     body.callbackUrl = job.callbackUrl;
+    if (job.localize) body.localize = job.localize;
   }
   return body;
 }
@@ -69,6 +70,8 @@ export function presentWorkerJob(job) {
     voice: job.voice,
     // Render options for the worker (promo3d palette/hero, ugc presenter). Callers are told not to put secrets here.
     metadata: job.metadata || {},
+    // Ad localization spec (source ad, swaps, captions, dub, consent). Null for other styles.
+    localize: job.localize || null,
     engine: job.engine,
     width: job.width,
     height: job.height,

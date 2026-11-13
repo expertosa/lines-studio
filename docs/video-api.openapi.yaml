@@ -382,6 +382,49 @@ components:
         metadata:
           type: object
           additionalProperties: true
+        localize: { $ref: "#/components/schemas/Localize" }
+    Localize:
+      type: object
+      additionalProperties: false
+      description: >-
+        Required for style `localize` (listed only when LINES_ENABLE_LOCALIZE=1), rejected for other styles.
+        Needs at least one of swaps, captions, dub. A character swap or a dub needs consent.likeness=true.
+        The swap model is not connected yet: jobs queue for a `localize` worker and none exists today.
+      required: [source]
+      properties:
+        source:
+          type: object
+          required: [url]
+          properties:
+            url: { type: string, format: uri, description: "Public https link to the source ad (MP4)" }
+        swaps:
+          type: array
+          maxItems: 30
+          items:
+            type: object
+            required: [kind]
+            description: Needs preset, target or referenceUrl.
+            properties:
+              kind: { type: string, enum: [character, outfit, product, background] }
+              preset:
+                type: string
+                description: >-
+                  character: saudi-man, saudi-woman, saudi-family, saudi-youth.
+                  outfit: thobe-shemagh, thobe-ghutra, abaya, saudi-casual, saudi-sport.
+                  background: riyadh-boulevard, riyadh-kafd, jeddah-corniche, alula, abha, saudi-home-majlis, saudi-cafe.
+              target: { type: string, maxLength: 200 }
+              referenceUrl: { type: string, format: uri, description: "Public https reference image" }
+        captions:
+          type: object
+          required: [dialect]
+          properties:
+            dialect: { type: string, enum: [najdi, hijazi, janoubi, sharqawi, white] }
+            text: { type: string, maxLength: 2000 }
+        dub: { type: boolean, description: "Saudi-dialect voice-over; needs captions.dialect" }
+        consent:
+          type: object
+          properties:
+            likeness: { type: boolean, description: "Caller holds the rights to change people and voices in this ad" }
     JobAccepted:
       type: object
       required: [id, status]
@@ -400,12 +443,13 @@ components:
         language: { $ref: "#/components/schemas/Language" }
         seconds: { type: integer }
         voice: { type: string }
-        engine: { type: string, enum: [moneyprinter, template, external, blender, ugc] }
+        engine: { type: string, enum: [moneyprinter, template, external, blender, ugc, localize] }
         endUserId: { type: string, nullable: true }
         prompt: { type: string, nullable: true }
         script: { type: object, nullable: true }
         metadata: { type: object }
         callbackUrl: { type: string, nullable: true }
+        localize: { $ref: "#/components/schemas/Localize" }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         deadlineAt: { type: string, format: date-time }
@@ -444,6 +488,7 @@ components:
         seconds: { type: integer }
         voice: { type: string, description: "Edge TTS voice, or \"presenter\" for ugc (the presenter's own voice)" }
         metadata: { type: object, additionalProperties: true, description: "Caller metadata; workers read render options from it (promo3d palette/hero, ugc presenter)" }
+        localize: { allOf: [{ $ref: "#/components/schemas/Localize" }], nullable: true }
         engine: { type: string }
         width: { type: integer }
         height: { type: integer }

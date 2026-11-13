@@ -6,6 +6,7 @@ import LangSwitch from './LangSwitch';
 import { t } from '../lib/dict';
 import { site } from '../lib/site';
 import { socialCopy } from '../lib/social';
+import { adsCopy } from '../lib/ads';
 
 export default function SiteNav({ lang, path = '' }) {
   const d = t(lang);
@@ -51,6 +52,7 @@ export default function SiteNav({ lang, path = '' }) {
         <Link href={`/${lang}/work/`} onClick={close}>{d.nav.work}</Link>
         <Link href={`/${lang}/#packages`} onClick={close}>{d.nav.packages}</Link>
         <Link href={`/${lang}/#video`} onClick={close}>{d.nav.video}</Link>
+        <Link href={`/${lang}/ads/`} onClick={close}>{(adsCopy[lang] || adsCopy.ar).nav}</Link>
         <Link href={`/${lang}/social/`} onClick={close}>{(socialCopy[lang] || socialCopy.ar).nav}</Link>
         <Link href={`/${lang}/#how`} onClick={close}>{d.nav.how}</Link>
         <Link href={`/${lang}/mcp/`} onClick={close}>{d.nav.mcp}</Link>

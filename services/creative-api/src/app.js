@@ -121,6 +121,7 @@ export async function createApp(options) {
     enableTemplate,
     enableBlender: Boolean(options.enableBlender),
     enableUgc: Boolean(options.enableUgc),
+    enableLocalize: Boolean(options.enableLocalize),
     defaultEngine,
     template,
     signingKey: options.signingKey || null,

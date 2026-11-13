@@ -3,6 +3,7 @@ import { FORMATS, LANGUAGES, SECONDS } from './constants.js';
 import { ApiError } from './errors.js';
 import { findStyle, pixelSize } from './styles.js';
 import { assertPublicHttps } from './ssrf.js';
+import { DIALECTS, MAX_SWAPS, SWAP_KINDS, SWAP_PRESETS } from './engines/localize.js';
 
 const REFERENCE_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/;
@@ -52,7 +53,7 @@ export async function validateJob(body, options) {
     ]);
   }
   const allowed = new Set([
-    'reference', 'title', 'prompt', 'script', 'style', 'format', 'language', 'seconds', 'voice', 'callbackUrl', 'metadata',
+    'reference', 'title', 'prompt', 'script', 'style', 'format', 'language', 'seconds', 'voice', 'callbackUrl', 'metadata', 'localize',
   ]);
   for (const key of Object.keys(body)) {
     if (!allowed.has(key)) check.add(key, 'unknown');
@@ -73,9 +74,18 @@ export async function validateJob(body, options) {
   if (body.script !== undefined) {
     script = readScript(body.script, check);
   }
-  if (!prompt && !script?.text) check.add('prompt', 'required');
   const style = typeof body.style === 'string' ? findStyle(body.style, options) : null;
   if (!style) check.add('style', 'enum');
+  const isLocalize = style?.engine === 'localize';
+  // A localization job edits an existing ad, so it needs the localize spec, not a prompt.
+  if (!isLocalize && !prompt && !script?.text) check.add('prompt', 'required');
+  let localize = null;
+  if (isLocalize) {
+    if (body.localize === undefined) check.add('localize', 'required');
+    else localize = readLocalize(body.localize, check);
+  } else if (body.localize !== undefined) {
+    check.add('localize', 'unknown');
+  }
   if (typeof body.format !== 'string' || !FORMATS.includes(body.format)) check.add('format', 'enum');
   if (typeof body.language !== 'string' || !LANGUAGES.includes(body.language)) check.add('language', 'enum');
   if (!SECONDS.includes(body.seconds)) check.add('seconds', 'enum');
@@ -110,6 +120,13 @@ export async function validateJob(body, options) {
     });
     checkedUrl = result.href;
   }
+  if (localize) {
+    // The worker downloads these, so they get the same public-https check as callbacks.
+    localize.source.url = (await assertPublicHttps(localize.source.url, { lookup: options.lookup })).href;
+    for (const swap of localize.swaps) {
+      if (swap.referenceUrl) swap.referenceUrl = (await assertPublicHttps(swap.referenceUrl, { lookup: options.lookup })).href;
+    }
+  }
   const engine = style.engine;
   const size = pixelSize(engine, body.format);
   const canonical = {
@@ -124,6 +141,7 @@ export async function validateJob(body, options) {
     voice,
     callbackUrl: checkedUrl,
     metadata,
+    ...(localize ? { localize } : {}),
   };
   return {
     ...canonical,
@@ -208,4 +226,114 @@ function readMetadata(value, check) {
   }
   if (JSON.stringify(metadata).length > 2048) check.add('metadata', 'size');
   return metadata;
+}
+
+function httpsString(value) {
+  if (typeof value !== 'string' || value.length > 2048 || CONTROL_RE.test(value)) return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function shortText(value, max) {
+  return typeof value === 'string' && lengthOf(value.trim()) >= 1 && lengthOf(value) <= max && !CONTROL_RE.test(value) && !/[\r\n]/.test(value);
+}
+
+function readLocalize(value, check) {
+  if (!plainObject(value)) {
+    check.add('localize', 'type');
+    return null;
+  }
+  for (const key of Object.keys(value)) {
+    if (!['source', 'swaps', 'captions', 'dub', 'consent'].includes(key)) check.add(`localize.${key}`, 'unknown');
+  }
+  const out = { source: null, swaps: [], captions: null, dub: false, consent: { likeness: false } };
+
+  if (!plainObject(value.source)) check.add('localize.source', 'required');
+  else {
+    for (const key of Object.keys(value.source)) {
+      if (key !== 'url') check.add(`localize.source.${key}`, 'unknown');
+    }
+    if (!httpsString(value.source.url)) check.add('localize.source.url', 'format');
+    else out.source = { url: value.source.url };
+  }
+
+  if (value.swaps !== undefined) {
+    if (!Array.isArray(value.swaps) || value.swaps.length > MAX_SWAPS) check.add('localize.swaps', 'format');
+    else {
+      value.swaps.forEach((swap, index) => {
+        const at = `localize.swaps[${index}]`;
+        if (!plainObject(swap)) {
+          check.add(at, 'type');
+          return;
+        }
+        for (const key of Object.keys(swap)) {
+          if (!['kind', 'preset', 'target', 'referenceUrl'].includes(key)) check.add(`${at}.${key}`, 'unknown');
+        }
+        if (!SWAP_KINDS.includes(swap.kind)) {
+          check.add(`${at}.kind`, 'enum');
+          return;
+        }
+        const item = { kind: swap.kind };
+        if (swap.preset !== undefined) {
+          if (!SWAP_PRESETS[swap.kind].includes(swap.preset)) check.add(`${at}.preset`, 'enum');
+          else item.preset = swap.preset;
+        }
+        if (swap.target !== undefined) {
+          if (!shortText(swap.target, 200)) check.add(`${at}.target`, 'format');
+          else item.target = swap.target.trim();
+        }
+        if (swap.referenceUrl !== undefined) {
+          if (!httpsString(swap.referenceUrl)) check.add(`${at}.referenceUrl`, 'format');
+          else item.referenceUrl = swap.referenceUrl;
+        }
+        // A product swap needs to know which product: a reference image or a description.
+        if (!item.preset && !item.target && !item.referenceUrl) check.add(`${at}.target`, 'required');
+        out.swaps.push(item);
+      });
+    }
+  }
+
+  if (value.captions !== undefined) {
+    if (!plainObject(value.captions)) check.add('localize.captions', 'type');
+    else {
+      for (const key of Object.keys(value.captions)) {
+        if (key !== 'dialect' && key !== 'text') check.add(`localize.captions.${key}`, 'unknown');
+      }
+      const captions = {};
+      if (!DIALECTS.includes(value.captions.dialect)) check.add('localize.captions.dialect', 'enum');
+      else captions.dialect = value.captions.dialect;
+      if (value.captions.text !== undefined) {
+        if (typeof value.captions.text !== 'string' || lengthOf(value.captions.text.trim()) < 1 || lengthOf(value.captions.text) > 2000 || CONTROL_RE.test(value.captions.text)) {
+          check.add('localize.captions.text', 'format');
+        } else captions.text = value.captions.text.trim();
+      }
+      out.captions = captions;
+    }
+  }
+
+  if (value.dub !== undefined) {
+    if (typeof value.dub !== 'boolean') check.add('localize.dub', 'type');
+    else out.dub = value.dub;
+  }
+  if (out.dub && !out.captions?.dialect) check.add('localize.captions.dialect', 'required');
+
+  if (value.consent !== undefined) {
+    if (!plainObject(value.consent)) check.add('localize.consent', 'type');
+    else {
+      for (const key of Object.keys(value.consent)) {
+        if (key !== 'likeness') check.add(`localize.consent.${key}`, 'unknown');
+      }
+      if (value.consent.likeness !== undefined && typeof value.consent.likeness !== 'boolean') check.add('localize.consent.likeness', 'type');
+      else out.consent.likeness = value.consent.likeness === true;
+    }
+  }
+  // Swapping a person or cloning a voice needs the caller to confirm they hold the rights.
+  const touchesPeople = out.swaps.some((swap) => swap.kind === 'character') || out.dub;
+  if (touchesPeople && !out.consent.likeness) check.add('localize.consent.likeness', 'required');
+
+  if (out.swaps.length === 0 && !out.captions && !out.dub) check.add('localize.swaps', 'required');
+  return out;
 }

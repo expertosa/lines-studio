@@ -12,6 +12,9 @@ export default function VideoCard({
   video,
   poster,
   fit = 'contain',
+  note,
+  script,
+  scriptLabel,
   ctaHref,
   ctaLabel,
   visitHref,
@@ -169,6 +172,13 @@ export default function VideoCard({
         {category && <span className="cat">{category}</span>}
         <Title>{title}</Title>
         <p>{description}</p>
+        {note && <p className="vcard-note">{note}</p>}
+        {script && (
+          <details className="vcard-script">
+            <summary>{scriptLabel}</summary>
+            <p>{script}</p>
+          </details>
+        )}
         <div className="vcard-actions">
           <a className="btn btn-lime" href={ctaHref} data-umami-event="whatsapp" data-umami-event-place={place}>{ctaLabel}</a>
           {visitHref && (

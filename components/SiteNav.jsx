@@ -49,6 +49,7 @@ export default function SiteNav({ lang, path = '' }) {
       <nav id="site-nav" className={open ? 'nav is-open' : 'nav'} aria-label={lang === 'ar' ? 'القائمة الرئيسية' : 'Main menu'}>
         <Link href={`/${lang}/gallery/`} onClick={close}>{d.nav.gallery}</Link>
         <Link href={`/${lang}/work/`} onClick={close}>{d.nav.work}</Link>
+        <Link href={`/${lang}/ads/`} onClick={close}>{d.nav.ads}</Link>
         <Link href={`/${lang}/#packages`} onClick={close}>{d.nav.packages}</Link>
         <Link href={`/${lang}/#video`} onClick={close}>{d.nav.video}</Link>
         <Link href={`/${lang}/social/`} onClick={close}>{(socialCopy[lang] || socialCopy.ar).nav}</Link>

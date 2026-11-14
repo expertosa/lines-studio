@@ -11,6 +11,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, webkit } from 'playwright';
+import { VIDEO_VERSION } from '../lib/video.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'out');
@@ -72,7 +73,7 @@ function assertStaticMarkup(html, file) {
     const dataSrc = attr(tag, 'data-src');
     const preload = attr(tag, 'preload');
     if (!poster || !poster.endsWith('.webp')) fail(`${file} video poster is not a cover image: ${poster}`);
-    if (!dataSrc || !dataSrc.endsWith('.mp4')) fail(`${file} video data-src is not an mp4: ${dataSrc}`);
+    if (!dataSrc || !dataSrc.endsWith(`.mp4?v=${VIDEO_VERSION}`)) fail(`${file} video data-src is not a versioned mp4: ${dataSrc}`);
     if (preload !== 'none') fail(`${file} video preload should stay none until a card is near the viewport, got ${preload}`);
     if (attr(tag, 'src') !== null) fail(`${file} video has src in the static HTML (should stay lazy): ${tag.slice(0, 240)}`);
   }

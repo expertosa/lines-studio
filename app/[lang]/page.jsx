@@ -5,6 +5,7 @@ import { t } from '../../lib/dict';
 import { site } from '../../lib/site';
 import { pageMeta } from '../../lib/seo';
 import { featuredWorks, launchVideo, workCategories, works } from '../../lib/work';
+import { adCategories, featuredAds } from '../../lib/sample-ads';
 import VideoCard from '../../components/VideoCard';
 import VideoSwiper from '../../components/VideoSwiper';
 import { socialCopy } from '../../lib/social';
@@ -39,6 +40,7 @@ export default async function Home({ params }) {
             <div className="row">
               <Link className="btn btn-lime" href={`/${lang}/gallery/`}>{d.hero.cta}</Link>
               <a className="btn btn-ghost" href="#packages">{d.hero.cta2}</a>
+              <Link className="btn btn-ghost" href={`/${lang}/ads/`}>{d.hero.cta3}</Link>
             </div>
           </div>
 
@@ -193,7 +195,48 @@ export default async function Home({ params }) {
             ))}
           </div>
           <p className="video-price">{d.video.price}</p>
-          <a className="btn btn-lime" href={`${wa}?text=${encodeURIComponent(d.video.wa)}`} data-umami-event="whatsapp" data-umami-event-place="video">{d.video.cta}</a>
+          <div className="row">
+            <a className="btn btn-lime" href={`${wa}?text=${encodeURIComponent(d.video.wa)}`} data-umami-event="whatsapp" data-umami-event-place="video">{d.video.cta}</a>
+            <Link className="btn btn-ghost" href={`/${lang}/ads/`}>{d.video.ads}</Link>
+          </div>
+        </div>
+      </section>
+
+      <section id="sample-ads" className="dark">
+        <div className="wrap section video-band">
+          <div className="section-head">
+            <div className="video-copy">
+              <h2 className="h2">{d.ads.homeT}</h2>
+              <p className="lead">{d.ads.homeS}</p>
+            </div>
+            <Link className="btn btn-lime" href={`/${lang}/ads/`}>{d.ads.homeAll}</Link>
+          </div>
+          <VideoSwiper label={d.ads.swiper} prevLabel={d.video.prev} nextLabel={d.video.next}>
+            {featuredAds.map((item, index) => (
+              <VideoCard
+                key={item.id}
+                title={item.brand[lang]}
+                description={item.hook[lang]}
+                note={item.caption[lang]}
+                script={item.script[lang]}
+                scriptLabel={d.ads.script}
+                category={`${d.ads.sample} · ${adCategories.find((c) => c.id === item.cat)?.[lang]}`}
+                alt={d.ads.alt(item.brand[lang], item.hook[lang])}
+                poster={item.poster}
+                video={item.video}
+                fit="cover"
+                ctaHref={`${wa}?text=${encodeURIComponent(d.ads.likeWa(item.brand[lang]))}`}
+                ctaLabel={d.ads.like}
+                soundOn={d.video.unmute}
+                soundOff={d.video.mute}
+                detailsLabel={d.ads.details}
+                place="home-ad"
+                heading="h3"
+                defer={index > 1}
+              />
+            ))}
+          </VideoSwiper>
+          <p className="video-price">{d.ads.homeNote}</p>
         </div>
       </section>
 
@@ -204,6 +247,18 @@ export default async function Home({ params }) {
             <p>{sc.homeS}</p>
           </div>
           <Link className="btn btn-ink" href={`/${lang}/social/`}>{sc.homeC}</Link>
+        </div>
+      </section>
+
+      <section className="wrap section">
+        <h2 className="h2">{d.homeFaq.title}</h2>
+        <div className="faq">
+          {d.homeFaq.items.map((f) => (
+            <details key={f.q}>
+              <summary>{f.q}</summary>
+              <p>{f.a}</p>
+            </details>
+          ))}
         </div>
       </section>
 

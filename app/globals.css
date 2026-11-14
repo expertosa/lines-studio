@@ -277,9 +277,14 @@ img { max-width: 100%; }
 .vcard-sound[aria-pressed='true'] { background: var(--lime); color: var(--ink); }
 .vcard-overlay { position: absolute; z-index: 2; inset-inline: 0; bottom: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 48px 12px 12px; background: linear-gradient(to top, rgba(0, 0, 0, .88) 42%, rgba(0, 0, 0, 0)); color: #fff; opacity: 0; transform: translateY(8px); transition: opacity .2s ease, transform .2s ease; pointer-events: none; }
 .vcard:hover .vcard-overlay, .vcard.is-open .vcard-overlay, .vcard:focus-within .vcard-overlay { opacity: 1; transform: none; pointer-events: auto; }
+.vcard.is-open .vcard-overlay { background: rgba(0, 0, 0, .9); max-height: 100%; overflow-y: auto; }
 .vcard-overlay .cat { background: rgba(255, 255, 255, .16); color: #fff; }
 .vcard-overlay h2, .vcard-overlay h3 { font-size: 16px; font-weight: 800; line-height: 1.35; }
 .vcard-overlay p { font-size: 13px; line-height: 1.5; color: rgba(255, 255, 255, .88); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.vcard-overlay .vcard-note { -webkit-line-clamp: 2; color: rgba(255, 255, 255, .76); }
+.vcard-script { width: 100%; font-size: 12px; }
+.vcard-script summary { cursor: pointer; font-weight: 700; }
+.vcard-script p { display: block; -webkit-line-clamp: unset; margin-top: 4px; }
 .vcard-actions { display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: 100%; margin-top: 4px; }
 .vcard-overlay .btn { width: 100%; min-height: 40px; padding: 8px 12px; font-size: 14px; }
 .vcard-visit { color: #fff; font-size: 13px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; text-align: center; }

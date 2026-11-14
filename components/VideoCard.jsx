@@ -54,6 +54,7 @@ export default function VideoCard({
   }
 
   function playEl(el) {
+    // muted has to be set before play(), or Safari rejects autoplay.
     markMuted(el);
     const pending = el.play();
     if (pending && typeof pending.then === 'function') {
@@ -62,9 +63,17 @@ export default function VideoCard({
       }).catch((err) => {
         if (!wantPlay.current) return;
         if (err && err.name === 'AbortError') return;
+        // Not enough media yet (Safari waits on a 206). loadeddata/canplay retry.
+        if (el.readyState < 3) return;
         setNeedsTap(true);
       });
     }
+  }
+
+  function retryPlay() {
+    const el = videoRef.current;
+    if (!el || !wantPlay.current || !el.paused) return;
+    playEl(el);
   }
 
   useEffect(() => {
@@ -232,6 +241,8 @@ export default function VideoCard({
             width={720}
             height={1280}
             aria-hidden="true"
+            onLoadedData={retryPlay}
+            onCanPlay={retryPlay}
             onPlay={() => setPlaying(true)}
             onPlaying={() => {
               setPlaying(true);

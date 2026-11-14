@@ -45,6 +45,7 @@ export default function WorkGrid({ lang }) {
             visitHint={visitHint}
             soundOn={d.video.unmute}
             soundOff={d.video.mute}
+            playLabel={d.video.play}
             detailsLabel={d.work.details}
             place="work-card"
             heading="h2"

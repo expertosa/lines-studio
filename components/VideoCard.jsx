@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 export default function VideoCard({
   id,
@@ -22,6 +23,7 @@ export default function VideoCard({
   visitHint,
   soundOn,
   soundOff,
+  playLabel = 'Play',
   detailsLabel,
   place,
   heading = 'h2',
@@ -32,12 +34,38 @@ export default function VideoCard({
   const uid = useId();
   const mediaRef = useRef(null);
   const videoRef = useRef(null);
+  const wantPlay = useRef(false);
   const [open, setOpen] = useState(false);
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [shown, setShown] = useState(!defer);
+  const [armed, setArmed] = useState(false);
+  const [needsTap, setNeedsTap] = useState(false);
   const still = poster || image;
   const Title = heading === 'h3' ? 'h3' : 'h2';
+
+  function markMuted(el) {
+    el.muted = true;
+    el.defaultMuted = true;
+    el.setAttribute('muted', '');
+    el.playsInline = true;
+    el.setAttribute('playsinline', '');
+    el.autoplay = true;
+  }
+
+  function playEl(el) {
+    markMuted(el);
+    const pending = el.play();
+    if (pending && typeof pending.then === 'function') {
+      pending.then(() => {
+        if (wantPlay.current) setNeedsTap(false);
+      }).catch((err) => {
+        if (!wantPlay.current) return;
+        if (err && err.name === 'AbortError') return;
+        setNeedsTap(true);
+      });
+    }
+  }
 
   useEffect(() => {
     if (shown) return undefined;
@@ -56,42 +84,74 @@ export default function VideoCard({
   useEffect(() => {
     if (!video) return undefined;
     const box = mediaRef.current;
-    const el = videoRef.current;
-    if (!box || !el) return undefined;
-    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    el.muted = true;
-    el.defaultMuted = true;
-    el.setAttribute('muted', '');
+    if (!box) return undefined;
 
-    function arm() {
-      if (el.getAttribute('src')) return;
-      el.preload = 'metadata';
-      el.src = video;
+    function near() {
+      const rect = box.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+      if (rect.width < 2 || rect.height < 2) return false;
+      const marginY = Math.max(160, vh * 0.25);
+      return rect.bottom > -marginY && rect.top < vh + marginY && rect.right > -80 && rect.left < vw + 80;
     }
-    function play() {
-      if (motion.matches) return;
-      arm();
-      const pending = el.play();
-      if (pending) pending.catch(() => {});
+
+    let alive = true;
+    function sync() {
+      if (!alive) return;
+      const el = videoRef.current;
+      if (near()) {
+        wantPlay.current = true;
+        setArmed(true);
+        if (el && el.getAttribute('src') && el.paused) playEl(el);
+      } else {
+        wantPlay.current = false;
+        setNeedsTap(false);
+        if (el && !el.paused) el.pause();
+      }
     }
-    function pause() {
-      if (!el.paused) el.pause();
-    }
-    const observer = new IntersectionObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) play();
-      else pause();
-    }, { threshold: [0, 0.5, 0.75] });
+
+    // Any overlap, including a card only partly in view. Far cards stay paused.
+    const observer = new IntersectionObserver(sync, { root: null, rootMargin: '25% 0px', threshold: 0 });
     observer.observe(box);
-    const onMotion = () => { if (motion.matches) pause(); };
-    motion.addEventListener('change', onMotion);
+    const scroller = box.closest('.vswiper-track');
+    let scrollerObserver;
+    if (scroller) {
+      scrollerObserver = new IntersectionObserver(sync, { root: scroller, rootMargin: '0px 120px', threshold: 0 });
+      scrollerObserver.observe(box);
+    }
+    sync();
+    const raf = requestAnimationFrame(sync);
+    // Hash jumps, font swap and the horizontal scroller can move a card into
+    // view without a later intersection callback. Recheck until layout settles.
+    const poll = window.setInterval(sync, 150);
+    const stopPoll = window.setTimeout(() => window.clearInterval(poll), 2500);
+    window.addEventListener('scroll', sync, { capture: true, passive: true });
+    window.addEventListener('resize', sync);
+    scroller?.addEventListener('scroll', sync, { passive: true });
+    document.fonts?.ready?.then(() => { if (alive) sync(); });
     return () => {
+      alive = false;
+      cancelAnimationFrame(raf);
+      window.clearInterval(poll);
+      window.clearTimeout(stopPoll);
       observer.disconnect();
-      motion.removeEventListener('change', onMotion);
-      pause();
+      scrollerObserver?.disconnect();
+      window.removeEventListener('scroll', sync, { capture: true });
+      window.removeEventListener('resize', sync);
+      scroller?.removeEventListener('scroll', sync);
+      wantPlay.current = false;
+      const el = videoRef.current;
+      if (el && !el.paused) el.pause();
     };
   }, [video]);
+
+  useEffect(() => {
+    if (!armed || !video) return undefined;
+    const el = videoRef.current;
+    if (!el || !wantPlay.current) return undefined;
+    playEl(el);
+    return undefined;
+  }, [armed, video]);
 
   useEffect(() => {
     if (!video) return undefined;
@@ -112,15 +172,33 @@ export default function VideoCard({
     const nextMuted = !el.muted;
     if (!nextMuted) {
       window.dispatchEvent(new CustomEvent('lines-video-sound', { detail: uid }));
-      if (!el.getAttribute('src')) {
-        el.preload = 'metadata';
+      wantPlay.current = true;
+      if (!armed) flushSync(() => setArmed(true));
+      if (!el.getAttribute('src') && video) {
+        el.preload = 'auto';
         el.src = video;
       }
       const pending = el.play();
-      if (pending) pending.catch(() => {});
+      if (pending && typeof pending.then === 'function') {
+        pending.then(() => setNeedsTap(false)).catch(() => setNeedsTap(true));
+      }
     }
     el.muted = nextMuted;
     setMuted(nextMuted);
+  }
+
+  function onPlayClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    wantPlay.current = true;
+    flushSync(() => setArmed(true));
+    const el = videoRef.current;
+    if (!el) return;
+    markMuted(el);
+    const pending = el.play();
+    if (pending && typeof pending.then === 'function') {
+      pending.then(() => setNeedsTap(false)).catch(() => setNeedsTap(true));
+    }
   }
 
   return (
@@ -142,18 +220,35 @@ export default function VideoCard({
         {video && (
           <video
             ref={videoRef}
+            poster={still || undefined}
             data-src={video}
+            src={armed ? video : undefined}
+            autoPlay
             muted
             defaultMuted
             loop
             playsInline
-            preload="none"
+            preload={armed ? 'auto' : 'none'}
             width={720}
             height={1280}
             aria-hidden="true"
-            onPlaying={() => setPlaying(true)}
+            onPlay={() => setPlaying(true)}
+            onPlaying={() => {
+              setPlaying(true);
+              setNeedsTap(false);
+            }}
             onPause={() => setPlaying(false)}
           />
+        )}
+        {video && needsTap && (
+          <button
+            type="button"
+            className="vcard-play"
+            aria-label={playLabel}
+            onClick={onPlayClick}
+          >
+            <PlayIcon />
+          </button>
         )}
         {video && (
           <button
@@ -191,6 +286,14 @@ export default function VideoCard({
         <span className="sr">{detailsLabel}</span>
       </div>
     </article>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+      <path d="M10 7.2v13.6l12-6.8-12-6.8z" fill="currentColor" />
+    </svg>
   );
 }
 

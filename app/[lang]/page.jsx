@@ -156,6 +156,7 @@ export default async function Home({ params }) {
               ctaLabel={d.video.cta}
               soundOn={d.video.unmute}
               soundOff={d.video.mute}
+              playLabel={d.video.play}
               detailsLabel={d.video.details}
               place="video-card"
               heading="h3"
@@ -178,6 +179,7 @@ export default async function Home({ params }) {
                 visitHint={lang === 'ar' ? '(يفتح في تبويب جديد)' : '(opens in a new tab)'}
                 soundOn={d.video.unmute}
                 soundOff={d.video.mute}
+                playLabel={d.video.play}
                 detailsLabel={d.work.details}
                 place="video-work"
                 heading="h3"
@@ -229,6 +231,7 @@ export default async function Home({ params }) {
                 ctaLabel={d.ads.like}
                 soundOn={d.video.unmute}
                 soundOff={d.video.mute}
+                playLabel={d.video.play}
                 detailsLabel={d.ads.details}
                 place="home-ad"
                 heading="h3"

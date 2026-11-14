@@ -269,13 +269,16 @@ img { max-width: 100%; }
 .vcard { position: relative; aspect-ratio: 9 / 16; border-radius: 20px; overflow: hidden; background: #1a1a1a; min-width: 0; }
 .vcard-media { position: absolute; inset: 0; }
 .vcard-media img, .vcard-media video { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.vcard-media img { z-index: 0; }
+.vcard-media video { z-index: 1; opacity: 1; visibility: visible; }
 .vcard-media img.is-cover, .vcard-media video { object-fit: cover; object-position: center; }
 .vcard-media img.is-contain { object-fit: cover; object-position: center; }
 .vcard.is-playing .vcard-media img { opacity: 0; }
-.vcard-hit { position: absolute; inset: 0; z-index: 1; cursor: pointer; }
-.vcard-sound { position: absolute; z-index: 3; top: 10px; inset-inline-end: 10px; width: 36px; height: 36px; border: 0; border-radius: 999px; background: rgba(0, 0, 0, .55); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.vcard-hit { position: absolute; inset: 0; z-index: 2; cursor: pointer; }
+.vcard-play { position: absolute; z-index: 5; top: 50%; left: 50%; width: 72px; height: 72px; transform: translate(-50%, -50%); border: 0; border-radius: 999px; background: #fff; color: #111; display: grid; place-items: center; cursor: pointer; box-shadow: 0 0 0 4px rgba(0, 0, 0, .45), 0 10px 28px rgba(0, 0, 0, .35); }
+.vcard-sound { position: absolute; z-index: 4; top: 10px; inset-inline-end: 10px; width: 36px; height: 36px; border: 0; border-radius: 999px; background: rgba(0, 0, 0, .55); color: #fff; display: grid; place-items: center; cursor: pointer; }
 .vcard-sound[aria-pressed='true'] { background: var(--lime); color: var(--ink); }
-.vcard-overlay { position: absolute; z-index: 2; inset-inline: 0; bottom: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 48px 12px 12px; background: linear-gradient(to top, rgba(0, 0, 0, .88) 42%, rgba(0, 0, 0, 0)); color: #fff; opacity: 0; transform: translateY(8px); transition: opacity .2s ease, transform .2s ease; pointer-events: none; }
+.vcard-overlay { position: absolute; z-index: 3; inset-inline: 0; bottom: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 48px 12px 12px; background: linear-gradient(to top, rgba(0, 0, 0, .88) 42%, rgba(0, 0, 0, 0)); color: #fff; opacity: 0; transform: translateY(8px); transition: opacity .2s ease, transform .2s ease; pointer-events: none; }
 .vcard:hover .vcard-overlay, .vcard.is-open .vcard-overlay, .vcard:focus-within .vcard-overlay { opacity: 1; transform: none; pointer-events: auto; }
 .vcard.is-open .vcard-overlay { background: rgba(0, 0, 0, .9); max-height: 100%; overflow-y: auto; }
 .vcard-overlay .cat { background: rgba(255, 255, 255, .16); color: #fff; }

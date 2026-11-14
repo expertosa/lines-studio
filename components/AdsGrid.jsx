@@ -42,6 +42,7 @@ export default function AdsGrid({ lang }) {
             ctaLabel={d.ads.like}
             soundOn={d.video.unmute}
             soundOff={d.video.mute}
+            playLabel={d.video.play}
             detailsLabel={d.ads.details}
             place="ad-card"
             heading="h2"
